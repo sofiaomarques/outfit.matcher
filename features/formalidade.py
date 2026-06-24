@@ -34,6 +34,5 @@ def classificar_formalidade(caminho_imagem):
     formalidade = labels[indice]
 
     return {
-        "formalidade": formalidade,
         "codigo":      formalidade_map[formalidade]
     }
