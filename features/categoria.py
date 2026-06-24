@@ -5,7 +5,6 @@ from transformers import CLIPProcessor, CLIPModel
 model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
 processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
-# mapeamento de categoria para número
 categoria_map = {
     "calça":         1,
     "short":         2,
@@ -23,16 +22,16 @@ def classificar_categoria(caminho_imagem):
     imagem = Image.open(caminho_imagem).convert("RGB")
 
     opcoes = [
-        "pants or trousers",          # calça
-        "shorts",                      # short
-        "a skirt",                     # saia
-        "a dress",                     # vestido
-        "a top or crop top",           # top
-        "a t-shirt",                   # camiseta
-        "a tank top or sleeveless",    # regata
-        "a jacket",                    # jaqueta
-        "a coat or overcoat",          # casaco
-        "a long sleeve blouse or shirt" # blusa de manga
+        "pants or trousers",          
+        "shorts",                     
+        "a skirt",                     
+        "a dress",                     
+        "a top or crop top",           
+        "a t-shirt",                   
+        "a tank top or sleeveless",    
+        "a jacket",                    
+        "a coat or overcoat",         
+        "a long sleeve blouse or shirt"
     ]
 
     labels = [
@@ -52,4 +51,4 @@ def classificar_categoria(caminho_imagem):
     return {
         "categoria": categoria,
         "codigo":    categoria_map[categoria],
-    }
+    } 
