@@ -17,12 +17,12 @@ def extrair_cores(caminho_imagem):
     cor_secundaria = cores[1]
     
     brilho = sum(cor_principal) / 3
-    if brilho > 170:
-        tonalidade = "claro"
-    elif brilho > 85:
-        tonalidade = "médio"
+    if brilho > 160:
+        tonalidade = 1
+    elif brilho > 60:
+        tonalidade = 2
     else:
-        tonalidade = "escuro"
+        tonalidade = 3
     
     return {
         "cor_principal":  cor_principal,
