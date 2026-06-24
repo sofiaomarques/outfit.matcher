@@ -1,5 +1,11 @@
 from features.categoria import classificar_categoria
 
+tipo_map = {
+    "parte de baixo": 1,
+    "peça única":     2,
+    "parte de cima":  3
+}
+
 def classificar_tipo(caminho_imagem):
     resultado = classificar_categoria(caminho_imagem)
     codigo = resultado["codigo"]
@@ -12,7 +18,7 @@ def classificar_tipo(caminho_imagem):
         tipo = "parte de cima"
     
     return {
-        "categoria": resultado["categoria"],
-        "codigo":    codigo,
-        "tipo":      tipo
+        "categoria":      resultado["categoria"],
+        "codigo":         codigo,
+        "codigo_tipo":    tipo_map[tipo]
     }
