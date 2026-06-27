@@ -26,12 +26,11 @@ def gerar_embedding_completo(caminho_imagem):
         cores["cor_secundaria"][2] / 255,
         cores["tonalidade"] / 3,
         tipo["codigo"]        / 10,
-        tipo["tipo"]          / 3,
+        tipo["codigo_tipo"]   / 3,
         estampa["codigo"]     / 2,
         formalidade["codigo"] / 3
     ]
 
-    # embedding neural CLIP (512 números)
     imagem = Image.open(caminho_imagem).convert("RGB")
     inputs = processor(images=imagem, return_tensors="pt")
 
@@ -40,7 +39,6 @@ def gerar_embedding_completo(caminho_imagem):
 
     embedding_neural = embedding_clip[0].tolist()
 
-    # junta os dois embeddings
     embedding_final = embedding_manual + embedding_neural  # 523 números
 
     return {
