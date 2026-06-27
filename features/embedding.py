@@ -16,7 +16,7 @@ def gerar_embedding(caminho_imagem):
         round(cores["cor_secundaria"][0] / 255, 4),
         round(cores["cor_secundaria"][1] / 255, 4),
         round(cores["cor_secundaria"][2] / 255, 4),
-        round(cores["tonalidade"]        / 2,   4),
+        round(cores["tonalidade"]        / 3,   4),
         round(tipo["codigo"]             / 10,  4),
         round(tipo["codigo_tipo"]        / 3,   4),
         round(estampa["codigo"]          / 2,   4),
