@@ -1,6 +1,6 @@
 # outfit.matcher
 
-`outfit.matcher` é um projeto de machine learning em desenvolvimento para ajudar a escolher o melhor outfit do dia a partir de fatores como clima, estação, horário e características das roupas disponíveis.
+`outfit.matcher` é um projeto de machine learning em desenvolvimento para ajudar a escolher o melhor outfit do dia a partir de fatores como o horário e características das roupas disponíveis.
 
 A ideia é transformar peças do guarda-roupa em dados que um modelo consiga entender, combinando informações visuais das imagens com o contexto do dia para recomendar looks de forma mais inteligente.
 
@@ -11,7 +11,7 @@ A ideia é transformar peças do guarda-roupa em dados que um modelo consiga ent
 - Classifica a categoria da roupa com CLIP, como calça, saia, vestido, camiseta, jaqueta e outras.
 - Agrupa cada item por tipo: parte de cima, parte de baixo ou peça única.
 - Estima o nível de estampa e formalidade da roupa.
-- Gera embeddings numéricos que podem ser usados futuramente para treinar o modelo de recomendação.
+- Gera embeddings numéricos que serão usados para treinar o modelo de recomendação.
 
 ## Estrutura principal
 
@@ -47,4 +47,4 @@ python testar_cores.py
 
 ## Status
 
-O projeto ainda está em desenvolvimento. A etapa atual foca em extrair características visuais das roupas e criar representações numéricas para cada peça. Os próximos passos são integrar informações externas, como clima, estação e horário, e treinar o modelo para recomendar combinações de outfits.
+O projeto ainda está em desenvolvimento. A etapa atual foca em extrair características visuais das roupas e criar representações numéricas para cada peça. Os próximos passos são integrar informações e treinar o modelo para recomendar combinações de outfits.
