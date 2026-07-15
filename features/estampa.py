@@ -15,9 +15,9 @@ def classificar_estampa(caminho_imagem):
     imagem = Image.open(caminho_imagem).convert("RGB")
 
     opcoes = [
-        "a solid color clothing with no pattern",     # nenhuma
-        "a clothing with a small or subtle pattern",  # pouca
-        "a clothing with a bold or maximalist pattern" # muita
+        "a solid color clothing with no pattern",     
+        "a clothing with a small or subtle pattern",  
+        "a clothing with a bold or maximalist pattern" 
     ]
 
     labels = ["nenhuma", "pouca", "muita"]
