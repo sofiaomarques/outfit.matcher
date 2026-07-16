@@ -13,21 +13,30 @@ A ideia é transformar peças do guarda-roupa em dados que um modelo consiga ent
 - Estima o nível de estampa e formalidade da roupa.
 - Gera embeddings numéricos que serão usados para treinar o modelo de recomendação.
 
-## Estrutura principal
-
-```text
-features/
-  cores.py              # extração de cores e tonalidade
-  categoria.py          # classificação da categoria da roupa
-  tipo.py               # agrupamento por tipo de peça
-  estampa.py            # classificação do nível de estampa
-  formalidade.py        # classificação de formalidade
-  embedding.py          # embedding manual com features extraídas
-  embedding_neural.py   # embedding manual + representação neural do CLIP
-
-dados/roupas/           # imagens usadas nos testes
-testar_cores.py         # script simples para testar a extração de cores
-```
+outfit.matcher/
+│
+├── dados/
+│   ├── roupas/              # imagens de teste
+│   └── fashion-dataset/     # dataset Fashion Product Images (Kaggle)
+│       ├── images/
+│       └── styles.csv
+│
+├── features/
+│   ├── cores.py             # extrai cor principal, secundária e tonalidade
+│   ├── categoria.py         # classifica categoria com CLIP
+│   ├── tipo.py              # classifica tipo (cima, baixo, único)
+│   ├── estampa.py           # classifica estampa
+│   ├── formalidade.py       # classifica formalidade
+│   ├── embedding.py         # gera feature vector manual (11 números)
+│   └── embedding_neural.py  # gera feature vector híbrido (523 números)
+│
+├── model/
+│   ├── preparar_dados.py    # lê dataset e cria pares de roupas
+│   └── treinar.py           # treina o modelo de match
+│
+├── main.py
+├── requirements.txt
+└── README.md
 
 ## Tecnologias usadas
 
