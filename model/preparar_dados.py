@@ -6,15 +6,12 @@ from features.tipo import classificar_tipo
 def carregar_roupas(caminho_csv, caminho_imagens):
     df = pd.read_csv(caminho_csv, on_bad_lines='skip')
     
-    # filtra só roupas pelo CSV
     df = df[df['masterCategory'] == 'Apparel']
     
-    # monta o caminho da imagem
     df['caminho'] = df['id'].apply(
         lambda x: os.path.join(caminho_imagens, f"{x}.jpg")
     )
     
-    # verifica se a imagem existe
     df = df[df['caminho'].apply(os.path.exists)].reset_index(drop=True)
     
     print(f"Imagens encontradas: {len(df)}")
