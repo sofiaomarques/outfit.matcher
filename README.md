@@ -139,8 +139,40 @@ print(resultado['tamanho'])     # 523
 ### Preparar dataset para treino
 
 ```bash
-PYTHONPATH=. python3 model/preparar_dados.py
+source .venv/bin/activate
+python3 -m pip install -r requirements.txt
+
+PYTHONPATH=. python3 model/preparar_dados.py \
+  --max-items 2000 \
+  --items-per-article-type 100 \
+  --max-pairs 12000
 ```
+
+O script usa somente `masterCategory == 'Apparel'`, seleciona no maximo 2.000 roupas,
+calcula embeddings de 523 numeros e salva:
+
+```text
+dados/styles_resumido.csv
+dados/embeddings_resumidos.npz
+dados/pares_outfits.npz
+```
+
+Para apagar permanentemente imagens que nao sao roupas, acrescente
+`--delete-non-clothing-images` ao comando. Para apagar tambem roupas fora da
+amostra, acrescente `--delete-images-not-sampled`.
+
+### Treinar o modelo
+
+```bash
+PYTHONPATH=. python3 model/treinar.py \
+  --pairs dados/pares_outfits.npz \
+  --epochs 25 \
+  --batch-size 256 \
+  --device auto
+```
+
+O melhor modelo sera salvo em `model/match_model.pt` e o historico em
+`model/historico_treino.csv`.
 
 ---
 
@@ -181,4 +213,4 @@ Os dois são concatenados em um vetor de **523 dimensões** que representa cada 
 ## 👩‍💻 Autora
 
 Sofia de Oliveira Marques  
-Projeto universitário — Machine Learning aplicado à modaD
+Projeto universitário — Machine Learning aplicado à moda <3
