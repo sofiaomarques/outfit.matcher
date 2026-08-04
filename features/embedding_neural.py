@@ -8,6 +8,23 @@ from features.formalidade import classificar_formalidade
 
 model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
 processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+model.eval()
+
+
+def extrair_vetor_clip(inputs):
+    """Compatibilidade entre versoes do transformers: sempre retorna 512 valores."""
+    with torch.no_grad():
+        saida = model.get_image_features(**inputs)
+
+    if hasattr(saida, "pooler_output"):
+        saida = saida.pooler_output
+    if not isinstance(saida, torch.Tensor):
+        raise TypeError("A saida de imagem do CLIP nao e um tensor reconhecido.")
+
+    vetor = saida.detach().cpu().float().reshape(-1)
+    if vetor.numel() != 512:
+        raise ValueError(f"CLIP retornou {vetor.numel()} valores; esperado 512.")
+    return vetor.tolist()
 
 def gerar_embedding_completo(caminho_imagem):
     cores       = extrair_cores(caminho_imagem)
@@ -34,10 +51,7 @@ def gerar_embedding_completo(caminho_imagem):
     imagem = Image.open(caminho_imagem).convert("RGB")
     inputs = processor(images=imagem, return_tensors="pt")
 
-    with torch.no_grad():
-        embedding_clip = model.get_image_features(**inputs)
-
-    embedding_neural = embedding_clip[0].tolist()
+    embedding_neural = extrair_vetor_clip(inputs)
 
     embedding_final = embedding_manual + embedding_neural  # 523 números
 

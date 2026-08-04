@@ -157,6 +157,29 @@ dados/embeddings_resumidos.npz
 dados/pares_outfits.npz
 ```
 
+### Criar uma copia limpa do dataset
+
+O dataset original e preservado. Para criar uma copia contendo somente produtos
+de `masterCategory == 'Apparel'`, rode:
+
+```bash
+PYTHONPATH=. python3 model/limpar_dataset.py
+```
+
+A copia sera criada em `dados/fashion-dataset-roupas/`, com `styles.csv` e
+`images/`. O comando copia 21.392 roupas e remove do conjunto limpo categorias
+como acessorios, calcados e cuidados pessoais. O dataset original nao e apagado.
+
+Para usar a copia limpa na preparacao:
+
+```bash
+PYTHONPATH=. python3 model/preparar_dados.py \
+  --dataset-dir dados/fashion-dataset-roupas \
+  --max-items 2000 \
+  --items-per-article-type 100 \
+  --max-pairs 12000
+```
+
 Para apagar permanentemente imagens que nao sao roupas, acrescente
 `--delete-non-clothing-images` ao comando. Para apagar tambem roupas fora da
 amostra, acrescente `--delete-images-not-sampled`.

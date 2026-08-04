@@ -200,6 +200,8 @@ def build_items(
             print(f"[aviso] pulando {item_id}: {exc}")
 
         if (index + 1) % 50 == 0:
+            if embeddings_by_id:
+                save_cache(cache_path, embeddings_by_id)
             print(f"[prep] embeddings: {index + 1}/{len(styles)}")
 
     if embeddings_by_id:

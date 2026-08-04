@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+
+.venv/
+venv/
+
+dados/fashion-dataset-roupas/
+dados/embeddings_resumidos.npz
+dados/pares_outfits.npz
+dados/styles_resumido.csv
+
+model/*.pt
+model/historico_treino.csv
