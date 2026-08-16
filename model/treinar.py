@@ -11,7 +11,6 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, Subset
 
-
 DEFAULT_PAIRS = Path("dados/pares_outfits.npz")
 DEFAULT_OUTPUT = Path("model/match_model.pt")
 DEFAULT_HISTORY = Path("model/historico_treino.csv")
