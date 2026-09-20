@@ -101,6 +101,11 @@ class _LooksScreenState extends State<LooksScreen> {
                             }
                           }),
                           onTap: () => _openDetail(outfit),
+                          onSave: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Look salvo!')),
+                            );
+                          },
                         );
                       },
                     ),
