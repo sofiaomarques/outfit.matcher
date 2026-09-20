@@ -1,11 +1,11 @@
 {
-    "name": "outfit_matcher",
-    "short_name": "outfit_matcher",
+    "name": "Wable",
+    "short_name": "Wable",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Combine suas peças e descubra novos looks.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

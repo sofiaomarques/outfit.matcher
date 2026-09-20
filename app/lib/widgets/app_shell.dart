@@ -97,7 +97,7 @@ class _SideNav extends StatelessWidget {
                 const StarShape(size: 22, color: AppColors.wine),
                 const SizedBox(width: 8),
                 Text(
-                  'outfit\nmatcher',
+                  'Wable',
                   style: Theme.of(context).textTheme.headlineMedium
                       ?.copyWith(fontSize: 22, height: 1),
                 ),
