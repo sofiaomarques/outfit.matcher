@@ -82,6 +82,8 @@ outfit.matcher/
 │   ├── preparar_dados.py    # lê dataset e cria pares de roupas
 │   └── treinar.py           # treina o modelo de match
 │
+├── app/                     # interface em Flutter (web + iOS + Android)
+│
 ├── main.py
 ├── requirements.txt
 └── README.md
@@ -230,6 +232,14 @@ O sistema usa uma abordagem **híbrida**:
 - **Embedding neural** — gerado pelo encoder visual do CLIP (512 dimensões), captura características visuais gerais
 
 Os dois são concatenados em um vetor de **523 dimensões** que representa cada peça. O modelo ML aprende a comparar dois vetores e gerar um score de compatibilidade.
+
+---
+
+## 📱 Interface
+
+A interface (web + iOS + Android) fica em [`app/`](app/), construída em Flutter.
+Por enquanto usa dados fake enquanto o pipeline acima não está conectado —
+veja [`app/README.md`](app/README.md) pra rodar.
 
 ---
 
