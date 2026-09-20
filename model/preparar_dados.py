@@ -17,6 +17,11 @@ DEFAULT_CACHE = Path("dados/embeddings_resumidos.npz")
 DEFAULT_STYLES_OUTPUT = Path("dados/styles_resumido.csv")
 EXPECTED_EMBEDDING_DIM = 523
 
+# subCategory do styles.csv que nao representam roupa "de fora" (top/bottom/vestido)
+# e por isso nao devem virar pares de outfit: roupa intima acaba classificada pelo
+# CLIP como se fosse blusa/calca e gera pares sem sentido (ex.: sutia + cueca).
+SUBCATEGORIAS_EXCLUIDAS = {"Innerwear"}
+
 
 @dataclass(frozen=True)
 class PreparedItem:
@@ -79,6 +84,8 @@ def load_apparel(styles_csv: Path, images_dir: Path) -> pd.DataFrame:
     styles = styles.dropna(subset=["id"]).copy()
     styles["id"] = styles["id"].astype(int)
     styles = styles[styles["masterCategory"].eq("Apparel")].copy()
+    if "subCategory" in styles.columns:
+        styles = styles[~styles["subCategory"].isin(SUBCATEGORIAS_EXCLUIDAS)].copy()
     styles["image_path"] = styles["id"].map(
         lambda item_id: str(image_path_for_id(images_dir, item_id))
     )
