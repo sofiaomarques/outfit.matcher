@@ -6,6 +6,7 @@ import 'screens/wardrobe_screen.dart';
 import 'screens/welcome_screen.dart';
 import 'theme/app_theme.dart';
 import 'widgets/app_shell.dart';
+import 'widgets/painted_heart.dart';
 
 void main() {
   runApp(const OutfitMatcherApp());
@@ -17,7 +18,7 @@ class OutfitMatcherApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Outfit Matcher',
+      title: 'Wable',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       home: const _RootNavigator(),
@@ -41,7 +42,10 @@ class _RootNavigatorState extends State<_RootNavigator> {
   static const _screens = [
     WardrobeScreen(),
     LooksScreen(),
-    PlaceholderScreen(title: 'Favoritos'),
+    PlaceholderScreen(
+      title: 'Favoritos',
+      icon: PaintedHeart(size: 48),
+    ),
     PlaceholderScreen(title: 'Configurações'),
   ];
 

@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 import '../widgets/gingham_background.dart';
+import '../widgets/leopard_star.dart';
+import '../widgets/painted_cherries.dart';
+import '../widgets/painted_heart.dart';
 import '../widgets/star_shape.dart';
 
 /// Primeira tela do app: apresentação + call-to-action pra começar,
@@ -36,26 +39,24 @@ class WelcomeScreen extends StatelessWidget {
                       ),
                     ),
                     const Positioned(
-                      top: 140,
+                      top: 130,
                       right: 90,
-                      child: StarShape(
-                        size: 48,
-                        color: AppColors.leopardBrown,
-                        filled: false,
-                        strokeWidth: 4,
-                        rotation: 0.3,
-                      ),
+                      child: LeopardStar(size: 56, rotation: 0.3),
+                    ),
+                    const Positioned(
+                      bottom: 190,
+                      right: 150,
+                      child: PaintedCherries(size: 44, rotation: -0.2),
                     ),
                     const Positioned(
                       bottom: 60,
                       right: 140,
-                      child: StarShape(
-                        size: 60,
-                        color: AppColors.leopardBrown,
-                        filled: false,
-                        strokeWidth: 4,
-                        rotation: -0.15,
-                      ),
+                      child: LeopardStar(size: 64, rotation: -0.15),
+                    ),
+                    const Positioned(
+                      bottom: 70,
+                      right: 40,
+                      child: PaintedHeart(size: 40, rotation: 0.25),
                     ),
                   ],
                   Padding(
@@ -106,7 +107,7 @@ class _TopBar extends StatelessWidget {
         const StarShape(size: 24, color: AppColors.wine),
         const SizedBox(width: 8),
         Text(
-          'outfit\nmatcher',
+          'Wable',
           style: Theme.of(
             context,
           ).textTheme.headlineMedium?.copyWith(fontSize: 20, height: 1),
