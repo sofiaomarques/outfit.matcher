@@ -29,34 +29,36 @@ class WelcomeScreen extends StatelessWidget {
               return Stack(
                 children: [
                   if (showDecorations) ...[
+                    // Pilha de adesivos no canto superior direito.
                     const Positioned(
-                      top: 40,
-                      right: 24,
+                      top: 36,
+                      right: 28,
                       child: StarShape(
-                        size: 90,
+                        size: 84,
                         color: AppColors.wine,
-                        rotation: -0.2,
+                        rotation: -0.15,
                       ),
                     ),
                     const Positioned(
-                      top: 130,
-                      right: 90,
-                      child: LeopardStar(size: 56, rotation: 0.3),
+                      top: 106,
+                      right: 108,
+                      child: LeopardStar(size: 50, rotation: 0.35),
                     ),
                     const Positioned(
-                      bottom: 190,
-                      right: 150,
-                      child: PaintedCherries(size: 44, rotation: -0.2),
+                      top: 152,
+                      right: 60,
+                      child: PaintedCherries(size: 38, rotation: -0.1),
+                    ),
+                    // Pilha de adesivos no canto inferior direito.
+                    const Positioned(
+                      bottom: 56,
+                      right: 118,
+                      child: LeopardStar(size: 60, rotation: -0.2),
                     ),
                     const Positioned(
-                      bottom: 60,
-                      right: 140,
-                      child: LeopardStar(size: 64, rotation: -0.15),
-                    ),
-                    const Positioned(
-                      bottom: 70,
-                      right: 40,
-                      child: PaintedHeart(size: 40, rotation: 0.25),
+                      bottom: 48,
+                      right: 36,
+                      child: PaintedHeart(size: 38, rotation: 0.2),
                     ),
                   ],
                   Padding(
