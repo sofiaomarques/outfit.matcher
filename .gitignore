@@ -11,3 +11,4 @@ dados/styles_resumido.csv
 
 model/*.pt
 model/historico_treino.csv
+model/historico_categoria.csv
