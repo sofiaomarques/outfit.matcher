@@ -16,55 +16,77 @@ class WelcomeScreen extends StatelessWidget {
     return Scaffold(
       body: GinghamBackground(
         child: SafeArea(
-          child: Stack(
-            children: [
-              const Positioned(
-                top: 40,
-                right: 24,
-                child: StarShape(
-                  size: 90,
-                  color: AppColors.wine,
-                  rotation: -0.2,
-                ),
-              ),
-              const Positioned(
-                top: 140,
-                right: 90,
-                child: StarShape(
-                  size: 48,
-                  color: AppColors.leopardBrown,
-                  filled: false,
-                  strokeWidth: 4,
-                  rotation: 0.3,
-                ),
-              ),
-              const Positioned(
-                bottom: 60,
-                right: 140,
-                child: StarShape(
-                  size: 60,
-                  color: AppColors.leopardBrown,
-                  filled: false,
-                  strokeWidth: 4,
-                  rotation: -0.15,
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 28,
-                  vertical: 20,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _TopBar(onStart: onStart),
-                    const Spacer(),
-                    _Hero(onStart: onStart),
-                    const Spacer(flex: 2),
+          child: LayoutBuilder(
+            builder: (context, outerConstraints) {
+              // Nas larguras estreitas (celular) as estrelas decorativas
+              // fixas colidiriam com o texto, então só aparecem a partir
+              // daqui.
+              final showDecorations = outerConstraints.maxWidth >= 700;
+
+              return Stack(
+                children: [
+                  if (showDecorations) ...[
+                    const Positioned(
+                      top: 40,
+                      right: 24,
+                      child: StarShape(
+                        size: 90,
+                        color: AppColors.wine,
+                        rotation: -0.2,
+                      ),
+                    ),
+                    const Positioned(
+                      top: 140,
+                      right: 90,
+                      child: StarShape(
+                        size: 48,
+                        color: AppColors.leopardBrown,
+                        filled: false,
+                        strokeWidth: 4,
+                        rotation: 0.3,
+                      ),
+                    ),
+                    const Positioned(
+                      bottom: 60,
+                      right: 140,
+                      child: StarShape(
+                        size: 60,
+                        color: AppColors.leopardBrown,
+                        filled: false,
+                        strokeWidth: 4,
+                        rotation: -0.15,
+                      ),
+                    ),
                   ],
-                ),
-              ),
-            ],
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 28,
+                      vertical: 20,
+                    ),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        return SingleChildScrollView(
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minHeight: constraints.maxHeight,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _TopBar(onStart: onStart),
+                                const SizedBox(height: 48),
+                                _Hero(onStart: onStart),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),
