@@ -60,29 +60,7 @@ class _StarPainter extends CustomPainter {
     canvas.drawPath(path, paint);
   }
 
-  Path _starPath(Size size) {
-    const points = 5;
-    final center = Offset(size.width / 2, size.height / 2);
-    final outerRadius = size.width / 2;
-    final innerRadius = outerRadius * 0.42;
-    final path = Path();
-
-    for (var i = 0; i < points * 2; i++) {
-      final radius = i.isEven ? outerRadius : innerRadius;
-      final angle = (math.pi / points) * i - math.pi / 2;
-      final offset = Offset(
-        center.dx + radius * math.cos(angle),
-        center.dy + radius * math.sin(angle),
-      );
-      if (i == 0) {
-        path.moveTo(offset.dx, offset.dy);
-      } else {
-        path.lineTo(offset.dx, offset.dy);
-      }
-    }
-    path.close();
-    return path;
-  }
+  Path _starPath(Size size) => buildStarPath(size);
 
   @override
   bool shouldRepaint(covariant _StarPainter oldDelegate) {
@@ -90,4 +68,30 @@ class _StarPainter extends CustomPainter {
         oldDelegate.filled != filled ||
         oldDelegate.strokeWidth != strokeWidth;
   }
+}
+
+/// Path de uma estrela de 5 pontas centralizada em [size], reaproveitado
+/// por [StarShape] e pelas variantes com estampa (ex: [LeopardStar]).
+Path buildStarPath(Size size) {
+  const points = 5;
+  final center = Offset(size.width / 2, size.height / 2);
+  final outerRadius = size.width / 2;
+  final innerRadius = outerRadius * 0.42;
+  final path = Path();
+
+  for (var i = 0; i < points * 2; i++) {
+    final radius = i.isEven ? outerRadius : innerRadius;
+    final angle = (math.pi / points) * i - math.pi / 2;
+    final offset = Offset(
+      center.dx + radius * math.cos(angle),
+      center.dy + radius * math.sin(angle),
+    );
+    if (i == 0) {
+      path.moveTo(offset.dx, offset.dy);
+    } else {
+      path.lineTo(offset.dx, offset.dy);
+    }
+  }
+  path.close();
+  return path;
 }
