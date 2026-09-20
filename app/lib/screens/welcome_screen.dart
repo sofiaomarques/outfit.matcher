@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/app_colors.dart';
 import '../widgets/gingham_background.dart';
@@ -153,11 +154,14 @@ class _Hero extends StatelessWidget {
           Text(
             'Combine suas peças, descubra novos looks e '
             'aproveite o que você já tem.',
-            style: Theme.of(
-              context,
-            ).textTheme.bodyLarge?.copyWith(color: AppColors.textMuted),
+            style: GoogleFonts.nunito(
+              fontSize: 19,
+              fontWeight: FontWeight.w600,
+              height: 1.45,
+              color: AppColors.textDark.withValues(alpha: 0.72),
+            ),
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 32),
           ElevatedButton.icon(
             onPressed: onStart,
             icon: const Icon(Icons.arrow_forward),
