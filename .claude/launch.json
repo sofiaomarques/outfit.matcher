@@ -4,10 +4,7 @@
     {
       "name": "outfit-matcher-web",
       "runtimeExecutable": "bash",
-      "runtimeArgs": [
-        "-c",
-        "cd app && flutter run -d web-server --web-port 5858 --dart-define=SUPABASE_URL=https://qrnwkzwbmddogcdiruix.supabase.co --dart-define=SUPABASE_ANON_KEY=sb_publishable_FktnbNHF9iDtDoKqh3I25g_eu2aIrhj"
-      ],
+      "runtimeArgs": ["-c", "cd app && flutter run -d web-server --web-port 5858"],
       "port": 5858
     }
   ]
