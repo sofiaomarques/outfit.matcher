@@ -1,14 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'screens/auth_screen.dart';
 import 'screens/looks_screen.dart';
+import 'screens/new_look_screen.dart';
 import 'screens/placeholder_screen.dart';
 import 'screens/wardrobe_screen.dart';
-import 'screens/welcome_screen.dart';
+import 'services/supabase_config.dart';
 import 'theme/app_theme.dart';
 import 'widgets/app_shell.dart';
 import 'widgets/painted_heart.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  if (SupabaseConfig.isConfigured) {
+    await Supabase.initialize(
+      url: SupabaseConfig.url,
+      publishableKey: SupabaseConfig.anonKey,
+    );
+  }
+
   runApp(const OutfitMatcherApp());
 }
 
@@ -21,13 +33,41 @@ class OutfitMatcherApp extends StatelessWidget {
       title: 'Wable',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
-      home: const _RootNavigator(),
+      home: SupabaseConfig.isConfigured
+          ? const _RootNavigator()
+          : const _MissingConfigScreen(),
     );
   }
 }
 
-/// Controla a transição da tela inicial pro app principal (com navegação
-/// entre guarda-roupa / looks / favoritos / configurações).
+/// Mostrada quando o app roda sem `--dart-define=SUPABASE_URL=...
+/// --dart-define=SUPABASE_ANON_KEY=...` (ver `lib/services/supabase_config.dart`).
+class _MissingConfigScreen extends StatelessWidget {
+  const _MissingConfigScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Text(
+            'Configuração do Supabase ausente.\n\n'
+            'Rode o app com:\n'
+            'flutter run --dart-define=SUPABASE_URL=... '
+            '--dart-define=SUPABASE_ANON_KEY=...',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Controla a navegação de acordo com o estado de autenticação (Supabase
+/// Auth): tela de boas-vindas/login enquanto deslogado, navegação entre
+/// guarda-roupa / looks / favoritos / configurações depois de logado.
 class _RootNavigator extends StatefulWidget {
   const _RootNavigator();
 
@@ -36,11 +76,11 @@ class _RootNavigator extends StatefulWidget {
 }
 
 class _RootNavigatorState extends State<_RootNavigator> {
-  bool _started = false;
   int _selectedIndex = 0;
 
   static const _screens = [
     WardrobeScreen(),
+    NewLookScreen(),
     LooksScreen(),
     PlaceholderScreen(
       title: 'Favoritos',
@@ -51,15 +91,21 @@ class _RootNavigatorState extends State<_RootNavigator> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_started) {
-      return WelcomeScreen(onStart: () => setState(() => _started = true));
-    }
+    return StreamBuilder<AuthState>(
+      stream: Supabase.instance.client.auth.onAuthStateChange,
+      builder: (context, snapshot) {
+        final session = Supabase.instance.client.auth.currentSession;
+        if (session == null) {
+          return const AuthScreen();
+        }
 
-    return AppShell(
-      selectedIndex: _selectedIndex,
-      onDestinationSelected: (index) =>
-          setState(() => _selectedIndex = index),
-      body: IndexedStack(index: _selectedIndex, children: _screens),
+        return AppShell(
+          selectedIndex: _selectedIndex,
+          onDestinationSelected: (index) =>
+              setState(() => _selectedIndex = index),
+          body: IndexedStack(index: _selectedIndex, children: _screens),
+        );
+      },
     );
   }
 }
