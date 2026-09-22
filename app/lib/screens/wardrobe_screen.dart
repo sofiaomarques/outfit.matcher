@@ -5,6 +5,7 @@ import '../models/clothing_item.dart';
 import '../repositories/wardrobe_repository.dart';
 import '../theme/app_colors.dart';
 import '../widgets/garment_thumbnail.dart';
+import '../widgets/painted_heart.dart';
 import 'add_item_screen.dart';
 
 /// Tela "Meu guarda-roupa": grid de peças filtrável por categoria, com as
@@ -306,11 +307,21 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Text(
-        'Nenhuma peça nessa categoria ainda.',
-        style: Theme.of(
-          context,
-        ).textTheme.bodyLarge?.copyWith(color: AppColors.textMuted),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Opacity(
+            opacity: 0.5,
+            child: PaintedHeart(size: 40, color: AppColors.pink, rotation: -0.1),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Nenhuma peça nessa categoria ainda.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(color: AppColors.textMuted),
+          ),
+        ],
       ),
     );
   }
