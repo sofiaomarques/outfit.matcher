@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 
-import '../data/mock_wardrobe.dart';
 import '../models/clothing_category.dart';
 import '../models/clothing_item.dart';
+import '../repositories/wardrobe_repository.dart';
 import '../theme/app_colors.dart';
 import '../widgets/garment_thumbnail.dart';
+import '../widgets/painted_heart.dart';
+import 'add_item_screen.dart';
 
-/// Tela "Meu guarda-roupa": grid de peças filtrável por categoria.
+/// Tela "Meu guarda-roupa": grid de peças filtrável por categoria, com as
+/// peças carregadas do Supabase (via [WardrobeRepository]).
 class WardrobeScreen extends StatefulWidget {
   const WardrobeScreen({super.key});
 
@@ -15,14 +18,77 @@ class WardrobeScreen extends StatefulWidget {
 }
 
 class _WardrobeScreenState extends State<WardrobeScreen> {
+  final _repository = WardrobeRepository();
   ClothingCategory? _selectedCategory;
-  final Set<String> _favoriteIds = {};
+  List<ClothingItem> _items = [];
+  bool _isLoading = true;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadItems();
+  }
+
+  Future<void> _loadItems() async {
+    setState(() {
+      _isLoading = true;
+      _errorText = null;
+    });
+    try {
+      final items = await _repository.fetchItems();
+      if (!mounted) return;
+      setState(() {
+        _items = items;
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _errorText = 'Não foi possível carregar seu guarda-roupa.';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _openAddItem() async {
+    final added = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (context) => AddItemScreen(repository: _repository),
+      ),
+    );
+    if (added == true) _loadItems();
+  }
+
+  Future<void> _toggleFavorite(ClothingItem item) async {
+    final updated = !item.isFavorite;
+    setState(() {
+      _items = [
+        for (final current in _items)
+          if (current.id == item.id)
+            ClothingItem(
+              id: current.id,
+              name: current.name,
+              category: current.category,
+              swatch: current.swatch,
+              imagePath: current.imagePath,
+              imageUrl: current.imageUrl,
+              isFavorite: updated,
+            )
+          else
+            current,
+      ];
+    });
+    try {
+      await _repository.setFavorite(item, updated);
+    } catch (_) {
+      if (mounted) _loadItems();
+    }
+  }
 
   List<ClothingItem> get _filteredItems {
-    if (_selectedCategory == null) return MockWardrobe.items;
-    return MockWardrobe.items
-        .where((item) => item.category == _selectedCategory)
-        .toList();
+    if (_selectedCategory == null) return _items;
+    return _items.where((item) => item.category == _selectedCategory).toList();
   }
 
   @override
@@ -43,7 +109,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                 ),
                 const Spacer(),
                 IconButton.filled(
-                  onPressed: () {},
+                  onPressed: _openAddItem,
                   style: IconButton.styleFrom(
                     backgroundColor: AppColors.pink,
                   ),
@@ -58,35 +124,39 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                   setState(() => _selectedCategory = category),
             ),
             const SizedBox(height: 20),
-            Expanded(
-              child: _filteredItems.isEmpty
-                  ? const _EmptyState()
-                  : GridView.builder(
-                      itemCount: _filteredItems.length,
-                      gridDelegate:
-                          const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 220,
-                            mainAxisSpacing: 20,
-                            crossAxisSpacing: 20,
-                            childAspectRatio: 0.82,
-                          ),
-                      itemBuilder: (context, index) {
-                        final item = _filteredItems[index];
-                        return _GarmentCard(
-                          item: item,
-                          isFavorite: _favoriteIds.contains(item.id),
-                          onFavoriteToggle: () => setState(() {
-                            if (!_favoriteIds.remove(item.id)) {
-                              _favoriteIds.add(item.id);
-                            }
-                          }),
-                        );
-                      },
-                    ),
-            ),
+            Expanded(child: _buildBody()),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_errorText != null) {
+      return _ErrorState(message: _errorText!, onRetry: _loadItems);
+    }
+    if (_filteredItems.isEmpty) {
+      return const _EmptyState();
+    }
+    return GridView.builder(
+      itemCount: _filteredItems.length,
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 220,
+        mainAxisSpacing: 20,
+        crossAxisSpacing: 20,
+        childAspectRatio: 0.82,
+      ),
+      itemBuilder: (context, index) {
+        final item = _filteredItems[index];
+        return _GarmentCard(
+          item: item,
+          isFavorite: item.isFavorite,
+          onFavoriteToggle: () => _toggleFavorite(item),
+        );
+      },
     );
   }
 }
@@ -237,11 +307,47 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Text(
-        'Nenhuma peça nessa categoria ainda.',
-        style: Theme.of(
-          context,
-        ).textTheme.bodyLarge?.copyWith(color: AppColors.textMuted),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Opacity(
+            opacity: 0.5,
+            child: PaintedHeart(size: 40, color: AppColors.pink, rotation: -0.1),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Nenhuma peça nessa categoria ainda.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(color: AppColors.textMuted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ErrorState extends StatelessWidget {
+  const _ErrorState({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            message,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(color: AppColors.textMuted),
+          ),
+          const SizedBox(height: 12),
+          TextButton(onPressed: onRetry, child: const Text('Tentar de novo')),
+        ],
       ),
     );
   }

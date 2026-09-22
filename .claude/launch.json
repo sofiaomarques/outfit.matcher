@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "outfit-matcher-web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd app && flutter run -d web-server --web-port 5858"],
+      "port": 5858
+    }
+  ]
+}

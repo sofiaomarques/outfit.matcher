@@ -8,12 +8,17 @@ import '../widgets/painted_cherries.dart';
 import '../widgets/painted_heart.dart';
 import '../widgets/star_shape.dart';
 
-/// Primeira tela do app: apresentação + call-to-action pra começar,
-/// igual ao mockup.
+/// Primeira tela do app: apresentação + call-to-action pra entrar ou criar
+/// conta, igual ao mockup.
 class WelcomeScreen extends StatelessWidget {
-  const WelcomeScreen({super.key, required this.onStart});
+  const WelcomeScreen({
+    super.key,
+    required this.onLogin,
+    required this.onSignUp,
+  });
 
-  final VoidCallback onStart;
+  final VoidCallback onLogin;
+  final VoidCallback onSignUp;
 
   @override
   Widget build(BuildContext context) {
@@ -70,7 +75,7 @@ class WelcomeScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _TopBar(onStart: onStart),
+                        _TopBar(onLogin: onLogin, onSignUp: onSignUp),
                         Expanded(
                           child: LayoutBuilder(
                             builder: (context, constraints) {
@@ -82,7 +87,7 @@ class WelcomeScreen extends StatelessWidget {
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [_Hero(onStart: onStart)],
+                                    children: [_Hero(onSignUp: onSignUp)],
                                   ),
                                 ),
                               );
@@ -103,9 +108,10 @@ class WelcomeScreen extends StatelessWidget {
 }
 
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.onStart});
+  const _TopBar({required this.onLogin, required this.onSignUp});
 
-  final VoidCallback onStart;
+  final VoidCallback onLogin;
+  final VoidCallback onSignUp;
 
   @override
   Widget build(BuildContext context) {
@@ -121,23 +127,23 @@ class _TopBar extends StatelessWidget {
         ),
         const Spacer(),
         TextButton(
-          onPressed: onStart,
+          onPressed: onLogin,
           child: const Text(
             'Entrar',
             style: TextStyle(color: AppColors.wine, fontWeight: FontWeight.w600),
           ),
         ),
         const SizedBox(width: 8),
-        ElevatedButton(onPressed: onStart, child: const Text('Cadastrar')),
+        ElevatedButton(onPressed: onSignUp, child: const Text('Cadastrar')),
       ],
     );
   }
 }
 
 class _Hero extends StatelessWidget {
-  const _Hero({required this.onStart});
+  const _Hero({required this.onSignUp});
 
-  final VoidCallback onStart;
+  final VoidCallback onSignUp;
 
   @override
   Widget build(BuildContext context) {
@@ -163,7 +169,7 @@ class _Hero extends StatelessWidget {
           ),
           const SizedBox(height: 32),
           ElevatedButton.icon(
-            onPressed: onStart,
+            onPressed: onSignUp,
             icon: const Icon(Icons.arrow_forward),
             label: const Text('Começar'),
           ),
