@@ -58,6 +58,7 @@ class AppTheme {
         primary: AppColors.wine,
         secondary: AppColors.pink,
         surface: AppColors.cream,
+        error: AppColors.error,
       ),
       textTheme: textTheme,
       appBarTheme: AppBarTheme(
@@ -83,6 +84,74 @@ class AppTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
           side: BorderSide(color: AppColors.pink.withValues(alpha: 0.4)),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: Colors.white,
+        labelStyle: GoogleFonts.quicksand(color: AppColors.textMuted),
+        floatingLabelStyle: GoogleFonts.quicksand(
+          color: AppColors.wine,
+          fontWeight: FontWeight.w600,
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: 16,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: AppColors.pink.withValues(alpha: 0.4)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: AppColors.pink.withValues(alpha: 0.4)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: AppColors.wine, width: 1.6),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: AppColors.error),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: AppColors.error, width: 1.6),
+        ),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: Colors.white,
+        selectedColor: AppColors.pink,
+        side: BorderSide(color: AppColors.pink.withValues(alpha: 0.5)),
+        shape: const StadiumBorder(),
+        showCheckmark: false,
+        labelStyle: GoogleFonts.quicksand(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textDark,
+        ),
+        secondaryLabelStyle: GoogleFonts.quicksand(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: AppColors.cream,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        color: AppColors.wine,
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: AppColors.wine,
+        contentTextStyle: GoogleFonts.quicksand(color: AppColors.cream),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
         ),
       ),
     );

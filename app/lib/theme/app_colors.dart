@@ -15,4 +15,8 @@ class AppColors {
   static const Color denim = Color(0xFF6E87A8);
   static const Color textDark = Color(0xFF3D1220);
   static const Color textMuted = Color(0xFF8C6B75);
+
+  /// Cor de erro/alerta em formulários — um vermelho-bordô, em vez do
+  /// vermelho puro do Material, pra não destoar da paleta.
+  static const Color error = Color(0xFFB3435C);
 }
