@@ -50,8 +50,18 @@ class _AddItemScreenState extends State<AddItemScreen> {
       builder: (context) => SafeArea(
         child: Wrap(
           children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
+              child: Text(
+                'De onde vem a foto?',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
             ListTile(
-              leading: const Icon(Icons.photo_camera_outlined),
+              leading: const Icon(
+                Icons.photo_camera_outlined,
+                color: AppColors.wine,
+              ),
               title: const Text('Tirar foto'),
               onTap: () {
                 Navigator.of(context).pop();
@@ -59,13 +69,17 @@ class _AddItemScreenState extends State<AddItemScreen> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
+              leading: const Icon(
+                Icons.photo_library_outlined,
+                color: AppColors.wine,
+              ),
               title: const Text('Escolher da galeria'),
               onTap: () {
                 Navigator.of(context).pop();
                 _pickImage(ImageSource.gallery);
               },
             ),
+            const SizedBox(height: 8),
           ],
         ),
       ),
@@ -119,6 +133,10 @@ class _AddItemScreenState extends State<AddItemScreen> {
                   decoration: BoxDecoration(
                     color: AppColors.pinkLight,
                     borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: AppColors.pink.withValues(alpha: 0.6),
+                      width: 1.5,
+                    ),
                   ),
                   child: _imageBytes == null
                       ? const Center(
@@ -155,7 +173,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
             ),
             if (_errorText != null) ...[
               const SizedBox(height: 12),
-              Text(_errorText!, style: const TextStyle(color: Colors.red)),
+              Text(_errorText!, style: const TextStyle(color: AppColors.error)),
             ],
             const SizedBox(height: 24),
             ElevatedButton(
