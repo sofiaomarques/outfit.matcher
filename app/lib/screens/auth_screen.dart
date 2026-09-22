@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../theme/app_colors.dart';
+import '../widgets/star_shape.dart';
 import 'welcome_screen.dart';
 
 enum _AuthMode { welcome, login, signUp }
@@ -135,6 +136,18 @@ class _AuthFormState extends State<_AuthForm> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  Row(
+                    children: [
+                      const StarShape(size: 22, color: AppColors.wine),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Wable',
+                        style: Theme.of(context).textTheme.headlineMedium
+                            ?.copyWith(fontSize: 20, height: 1),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
                   Text(
                     widget.isSignUp ? 'Criar conta' : 'Entrar',
                     style: Theme.of(context).textTheme.headlineLarge,
@@ -175,7 +188,10 @@ class _AuthFormState extends State<_AuthForm> {
                   ),
                   if (_errorText != null) ...[
                     const SizedBox(height: 12),
-                    Text(_errorText!, style: const TextStyle(color: Colors.red)),
+                    Text(
+                      _errorText!,
+                      style: const TextStyle(color: AppColors.error),
+                    ),
                   ],
                   if (_infoText != null) ...[
                     const SizedBox(height: 12),
