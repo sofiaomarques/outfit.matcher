@@ -14,6 +14,7 @@ const List<NavDestinationData> appDestinations = [
   NavDestinationData(icon: Icons.checkroom, label: 'Meu guarda-roupa'),
   NavDestinationData(icon: Icons.auto_awesome, label: 'Novo look'),
   NavDestinationData(icon: Icons.star_border_rounded, label: 'Looks'),
+  NavDestinationData(icon: Icons.shopping_cart_outlined, label: 'Wishlist'),
   NavDestinationData(icon: Icons.favorite_border, label: 'Favoritos'),
   NavDestinationData(icon: Icons.settings_outlined, label: 'Configurações'),
 ];

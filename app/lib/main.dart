@@ -6,6 +6,7 @@ import 'screens/looks_screen.dart';
 import 'screens/new_look_screen.dart';
 import 'screens/placeholder_screen.dart';
 import 'screens/wardrobe_screen.dart';
+import 'screens/wishlist_screen.dart';
 import 'services/supabase_config.dart';
 import 'theme/app_theme.dart';
 import 'widgets/app_shell.dart';
@@ -82,6 +83,7 @@ class _RootNavigatorState extends State<_RootNavigator> {
     WardrobeScreen(),
     NewLookScreen(),
     LooksScreen(),
+    WishlistScreen(),
     PlaceholderScreen(
       title: 'Favoritos',
       icon: PaintedHeart(size: 48),
