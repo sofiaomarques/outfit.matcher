@@ -1,14 +1,10 @@
 import torch
 from PIL import Image
-from transformers import CLIPModel, CLIPProcessor
 from features.cores import extrair_cores
 from features.tipo import classificar_tipo
 from features.estampa import classificar_estampa
 from features.formalidade import classificar_formalidade
-
-model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-model.eval()
+from features._clip_shared import model, processor
 
 
 def extrair_vetor_clip(inputs):
