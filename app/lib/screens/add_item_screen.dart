@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../models/clothing_category.dart';
 import '../repositories/wardrobe_repository.dart';
+import '../services/garment_analysis_service.dart';
 import '../theme/app_colors.dart';
 
 /// Tela de cadastro de uma peça nova: escolhe a foto (câmera ou galeria),
@@ -22,9 +23,11 @@ class AddItemScreen extends StatefulWidget {
 
 class _AddItemScreenState extends State<AddItemScreen> {
   final _nameController = TextEditingController();
+  final _analysisService = GarmentAnalysisService();
   ClothingCategory _category = ClothingCategory.top;
   Uint8List? _imageBytes;
   bool _isSaving = false;
+  bool _isCropping = false;
   String? _errorText;
 
   @override
@@ -41,7 +44,20 @@ class _AddItemScreenState extends State<AddItemScreen> {
     );
     if (picked == null) return;
     final bytes = await picked.readAsBytes();
-    setState(() => _imageBytes = bytes);
+    setState(() {
+      _imageBytes = bytes;
+      _isCropping = true;
+    });
+
+    try {
+      final recorte = await _analysisService.recortarPeca(bytes);
+      if (mounted) setState(() => _imageBytes = recorte);
+    } catch (_) {
+      // Serviço de recorte fora do ar ou falhou: mantém a foto original em
+      // vez de travar o cadastro da peça.
+    } finally {
+      if (mounted) setState(() => _isCropping = false);
+    }
   }
 
   void _showImageSourceSheet() {
@@ -146,9 +162,36 @@ class _AddItemScreenState extends State<AddItemScreen> {
                             color: AppColors.wine,
                           ),
                         )
-                      : ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: Image.memory(_imageBytes!, fit: BoxFit.cover),
+                      : Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: Image.memory(
+                                _imageBytes!,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                            if (_isCropping)
+                              ColoredBox(
+                                color: Colors.black.withValues(alpha: 0.35),
+                                child: const Center(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      CircularProgressIndicator(
+                                        color: Colors.white,
+                                      ),
+                                      SizedBox(height: 12),
+                                      Text(
+                                        'Recortando a peça...',
+                                        style: TextStyle(color: Colors.white),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                 ),
               ),
@@ -177,7 +220,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
             ],
             const SizedBox(height: 24),
             ElevatedButton(
-              onPressed: _isSaving ? null : _save,
+              onPressed: (_isSaving || _isCropping) ? null : _save,
               child: _isSaving
                   ? const SizedBox(
                       width: 20,
