@@ -1,9 +1,7 @@
 import torch
 from PIL import Image
-from transformers import CLIPProcessor, CLIPModel
 
-model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+from features._clip_shared import model, processor
 
 formalidade_map = {
     "informal":    0,

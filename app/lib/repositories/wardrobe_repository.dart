@@ -49,14 +49,16 @@ class WardrobeRepository {
   }) async {
     final userId = _userId;
     final id = const Uuid().v4();
-    final storagePath = '$userId/$id.jpg';
+    final contentType = _detectImageContentType(imageBytes);
+    final extensao = contentType == 'image/png' ? 'png' : 'jpg';
+    final storagePath = '$userId/$id.$extensao';
 
     await _client.storage
         .from(_bucket)
         .uploadBinary(
           storagePath,
           imageBytes,
-          fileOptions: const FileOptions(contentType: 'image/jpeg'),
+          fileOptions: FileOptions(contentType: contentType),
         );
 
     final row = await _client
@@ -104,4 +106,17 @@ class WardrobeRepository {
       isFavorite: row['is_favorite'] as bool,
     );
   }
+}
+
+/// Detecta PNG (assinatura `\x89PNG`) vs JPEG pelos bytes: a foto pode
+/// chegar já recortada em PNG (com transparência, via `/items/crop`) ou
+/// ainda em JPEG cru, se o serviço de recorte estiver fora do ar.
+String _detectImageContentType(Uint8List bytes) {
+  const pngSignature = [0x89, 0x50, 0x4E, 0x47];
+  final isPng =
+      bytes.length >= pngSignature.length &&
+      Iterable.generate(
+        pngSignature.length,
+      ).every((i) => bytes[i] == pngSignature[i]);
+  return isPng ? 'image/png' : 'image/jpeg';
 }
