@@ -5,9 +5,7 @@ import 'clothing_category.dart';
 /// Uma peça do guarda-roupa. Peças vindas do Supabase (ver
 /// WardrobeRepository) trazem [imageUrl] preenchida; [imagePath] é só pra
 /// assets embutidos no app. Sem nenhuma das duas, a peça é representada
-/// por um placeholder colorido no estilo catálogo. Ate a integracao com o
-/// pipeline em Python (model/gerar_outfit.py), a cor de placeholder não
-/// reflete a cor real da foto.
+/// por um placeholder colorido no estilo catálogo.
 class ClothingItem {
   const ClothingItem({
     required this.id,
@@ -16,7 +14,9 @@ class ClothingItem {
     required this.swatch,
     this.imagePath,
     this.imageUrl,
+    this.storagePath,
     this.isFavorite = false,
+    this.features,
   });
 
   final String id;
@@ -31,5 +31,27 @@ class ClothingItem {
 
   /// URL (assinada) da foto no Supabase Storage.
   final String? imageUrl;
+
+  /// Caminho da foto dentro do bucket `clothing-images` do Supabase.
+  final String? storagePath;
   final bool isFavorite;
+
+  /// Saída de `/items/analyze` (cor, categoria detectada, formalidade,
+  /// embedding...). Nula enquanto a peça não foi analisada — o
+  /// recomendador ignora peças sem features.
+  final Map<String, dynamic>? features;
+
+  ClothingItem copyWith({bool? isFavorite, Map<String, dynamic>? features}) {
+    return ClothingItem(
+      id: id,
+      name: name,
+      category: category,
+      swatch: swatch,
+      imagePath: imagePath,
+      imageUrl: imageUrl,
+      storagePath: storagePath,
+      isFavorite: isFavorite ?? this.isFavorite,
+      features: features ?? this.features,
+    );
+  }
 }

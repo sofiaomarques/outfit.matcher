@@ -1,25 +1,19 @@
 import 'package:flutter/material.dart';
 
-import '../data/mock_wardrobe.dart';
+import '../models/clothing_item.dart';
 import '../models/outfit.dart';
+import '../repositories/wardrobe_repository.dart';
 import '../services/current_user.dart';
+import '../services/recommendation_service.dart';
 import '../theme/app_colors.dart';
+import '../widgets/looks_status.dart';
 import '../widgets/outfit_card.dart';
 import 'outfit_detail_screen.dart';
 
-const List<String> _occasions = [
-  'Casual',
-  'Trabalho',
-  'Festa',
-  'Encontro',
-  'Dia a dia',
-];
-
 /// Tela "Novo look": saudação personalizada com o nome escolhido no
-/// cadastro, seguida de uma sugestão de look pra ocasião selecionada.
-/// A sugestão ainda vem de `MockWardrobe.outfits` — sem o pipeline real
-/// conectado, tenta casar a ocasião com as tags dos looks fake e, sem
-/// match, cai pro look de maior score.
+/// cadastro, seguida de uma sugestão de look pra ocasião selecionada,
+/// montada com as peças reais do guarda-roupa pelo recomendador da API
+/// (`model/recomendar.py`). "Ver outra" percorre as próximas sugestões.
 class NewLookScreen extends StatefulWidget {
   const NewLookScreen({super.key});
 
@@ -28,31 +22,163 @@ class NewLookScreen extends StatefulWidget {
 }
 
 class _NewLookScreenState extends State<NewLookScreen> {
+  static const _suggestionCount = 5;
+
+  final _recommender = RecommendationService(WardrobeRepository());
+
+  List<ClothingItem>? _items;
   String? _selectedOccasion;
+  List<Outfit> _looks = [];
+  int _lookIndex = 0;
   bool _isFavorite = false;
+  bool _isLoading = true;
+  String _loadingText = 'Carregando seu guarda-roupa...';
+  String? _errorText;
+  // Trocar de ocasião rápido dispara pedidos em paralelo; só o último vale.
+  int _requestId = 0;
 
-  Outfit? get _suggestion {
-    final occasion = _selectedOccasion;
-    if (occasion == null) return null;
+  @override
+  void initState() {
+    super.initState();
+    _loadWardrobe();
+  }
 
-    final matches = MockWardrobe.outfits
-        .where((outfit) => outfit.tags.contains(occasion))
-        .toList();
-    final pool = matches.isNotEmpty ? matches : MockWardrobe.outfits;
-    return pool.reduce((a, b) => b.score > a.score ? b : a);
+  Future<void> _loadWardrobe() async {
+    setState(() {
+      _isLoading = true;
+      _loadingText = 'Carregando seu guarda-roupa...';
+      _errorText = null;
+    });
+    try {
+      final items = await _recommender.loadWardrobe(
+        onProgress: (done, total) {
+          if (mounted) {
+            setState(
+              () => _loadingText = 'Analisando suas peças ($done/$total)...',
+            );
+          }
+        },
+      );
+      if (!mounted) return;
+      setState(() {
+        _items = items;
+        _isLoading = false;
+      });
+      if (_selectedOccasion != null) _recommend();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _errorText = 'Não foi possível carregar seu guarda-roupa.';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _recommend() async {
+    final items = _items;
+    if (items == null) return;
+    final requestId = ++_requestId;
+    setState(() {
+      _isLoading = true;
+      _loadingText = 'Montando seu look...';
+      _errorText = null;
+      _looks = [];
+      _lookIndex = 0;
+      _isFavorite = false;
+    });
+    try {
+      final looks = await _recommender.recommend(
+        items,
+        occasion: _selectedOccasion,
+        topK: _suggestionCount,
+      );
+      if (!mounted || requestId != _requestId) return;
+      setState(() {
+        _looks = looks;
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted || requestId != _requestId) return;
+      setState(() {
+        _errorText =
+            'Não foi possível gerar o look. Confira se a API está rodando.';
+        _isLoading = false;
+      });
+    }
   }
 
   void _selectOccasion(String occasion) {
+    setState(() => _selectedOccasion = occasion);
+    _recommend();
+  }
+
+  void _nextLook() {
     setState(() {
-      _selectedOccasion = occasion;
+      _lookIndex = (_lookIndex + 1) % _looks.length;
       _isFavorite = false;
     });
+  }
+
+  Widget _buildSuggestion() {
+    if (_isLoading) {
+      return LooksStatus(message: _loadingText, isLoading: true);
+    }
+    if (_errorText != null) {
+      return LooksStatus(
+        message: _errorText!,
+        onRetry: _items == null ? _loadWardrobe : _recommend,
+      );
+    }
+    if (_selectedOccasion == null) {
+      return const LooksStatus(
+        message: 'Escolha uma ocasião pra ver a sugestão de look de hoje.',
+      );
+    }
+    if (_looks.isEmpty) {
+      return const LooksStatus(
+        message:
+            'Ainda não dá pra montar um look: cadastre pelo menos uma peça '
+            'de cima e uma de baixo, ou um vestido.',
+      );
+    }
+
+    final suggestion = _looks[_lookIndex];
+    return Column(
+      children: [
+        Expanded(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 320),
+              child: AspectRatio(
+                aspectRatio: 0.85,
+                child: OutfitCard(
+                  outfit: suggestion,
+                  isFavorite: _isFavorite,
+                  onFavoriteToggle: () =>
+                      setState(() => _isFavorite = !_isFavorite),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => OutfitDetailScreen(outfit: suggestion),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (_looks.length > 1)
+          TextButton.icon(
+            onPressed: _nextLook,
+            icon: const Icon(Icons.refresh),
+            label: Text('Ver outra (${_lookIndex + 1}/${_looks.length})'),
+          ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final name = currentDisplayName();
-    final suggestion = _suggestion;
 
     return SafeArea(
       child: Padding(
@@ -67,67 +193,28 @@ class _NewLookScreenState extends State<NewLookScreen> {
             const SizedBox(height: 4),
             Text(
               'Qual a ocasião do dia?',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: AppColors.textMuted,
-              ),
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(color: AppColors.textMuted),
             ),
             const SizedBox(height: 20),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
-                for (final occasion in _occasions)
+                for (final occasion in occasionKeys.keys)
                   ChoiceChip(
                     label: Text(occasion),
                     selected: _selectedOccasion == occasion,
-                    onSelected: (_) => _selectOccasion(occasion),
+                    onSelected: _items == null
+                        ? null
+                        : (_) => _selectOccasion(occasion),
                   ),
               ],
             ),
             const SizedBox(height: 28),
-            Expanded(
-              child: suggestion == null
-                  ? const _EmptyState()
-                  : Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 320),
-                        child: AspectRatio(
-                          aspectRatio: 0.85,
-                          child: OutfitCard(
-                            outfit: suggestion,
-                            isFavorite: _isFavorite,
-                            onFavoriteToggle: () =>
-                                setState(() => _isFavorite = !_isFavorite),
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    OutfitDetailScreen(outfit: suggestion),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-            ),
+            Expanded(child: _buildSuggestion()),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text(
-        'Escolha uma ocasião pra ver a sugestão de look de hoje.',
-        textAlign: TextAlign.center,
-        style: Theme.of(
-          context,
-        ).textTheme.bodyLarge?.copyWith(color: AppColors.textMuted),
       ),
     );
   }

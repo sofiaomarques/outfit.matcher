@@ -66,15 +66,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
       _items = [
         for (final current in _items)
           if (current.id == item.id)
-            ClothingItem(
-              id: current.id,
-              name: current.name,
-              category: current.category,
-              swatch: current.swatch,
-              imagePath: current.imagePath,
-              imageUrl: current.imageUrl,
-              isFavorite: updated,
-            )
+            current.copyWith(isFavorite: updated)
           else
             current,
       ];

@@ -1,7 +1,8 @@
 import 'clothing_item.dart';
 
 /// Um look sugerido, equivalente ao dicionario `{"pecas": [...], "score": ...}`
-/// retornado por `model/gerar_outfit.py`, com metadados extras para a UI.
+/// retornado por `/looks/recommend` (`model/recomendar.py`), com metadados
+/// extras para a UI.
 class Outfit {
   const Outfit({
     required this.id,
