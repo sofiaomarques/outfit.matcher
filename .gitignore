@@ -20,3 +20,5 @@ model/historico_treino_*.csv
 
 dados/cores_recalculadas.npz
 dados/*.antes_cores.npz
+model/historico_categoria_clip.csv
+dados/validacao_real/

@@ -20,11 +20,14 @@ categoria_map = {
 _codigo_para_categoria = {codigo: nome for nome, codigo in categoria_map.items()}
 
 _MODELO_CATEGORIA = Path("model/categoria_model.pt")
+_MODELO_CLIP_AJUSTADO = Path("model/clip_categoria.pt")
 
 
 def classificar_categoria(caminho_imagem):
     imagem = Image.open(caminho_imagem).convert("RGB")
 
+    if _MODELO_CLIP_AJUSTADO.exists():
+        return _classificar_com_clip_ajustado(imagem)
     if _MODELO_CATEGORIA.exists():
         return _classificar_com_modelo(imagem)
     return _classificar_zero_shot(imagem)
@@ -40,6 +43,18 @@ def _extrair_embedding_clip(imagem):
     if hasattr(saida, "pooler_output"):
         saida = saida.pooler_output
     return saida.detach().cpu().float().reshape(-1).numpy()
+
+
+def _classificar_com_clip_ajustado(imagem):
+    """CLIP com as ultimas camadas ajustadas pra categoria
+    (model/finetune_clip_categoria.py). Copia separada do CLIP compartilhado."""
+    from model.clip_categoria import prever_categoria_imagem
+
+    codigo = prever_categoria_imagem(imagem, _MODELO_CLIP_AJUSTADO)
+    return {
+        "categoria": _codigo_para_categoria[codigo],
+        "codigo": codigo,
+    }
 
 
 def _classificar_com_modelo(imagem):
