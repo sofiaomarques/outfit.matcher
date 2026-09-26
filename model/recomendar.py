@@ -37,6 +37,14 @@ import torch
 from model.preparar_dados import PreparedItem, weak_compatibility
 from model.treinar import DEFAULT_OUTPUT, choose_device, load_model, select_features
 
+# Modelo v2 (model/preparar_pares_v2.py): treinado sem categoria/tipo do CLIP,
+# que aqui vem da categoria escolhida pela usuaria. Sem ele, usa o v1.
+CHECKPOINT_V2 = Path("model/match_model_v2.pt")
+
+
+def checkpoint_padrao() -> Path:
+    return CHECKPOINT_V2 if CHECKPOINT_V2.exists() else DEFAULT_OUTPUT
+
 # Codigos de features/categoria.py.
 CALCA, SHORT, SAIA, VESTIDO = 1, 2, 3, 4
 TOP, CAMISETA, REGATA, JAQUETA, CASACO, BLUSA_MANGA = 5, 6, 7, 8, 9, 10
@@ -184,11 +192,12 @@ def _carregar_modelo(caminho: str, mtime: float):
     return model, checkpoint, device
 
 
-def pontuar_pares(pares: list[tuple[Peca, Peca]], checkpoint_path: Path = DEFAULT_OUTPUT) -> list[float]:
+def pontuar_pares(pares: list[tuple[Peca, Peca]], checkpoint_path: Path | None = None) -> list[float]:
     """Score de compatibilidade (0-1) de cada par (cima, baixo). Sem modelo
     treinado, usa a regra fraca de cor/tom/estampa/formalidade."""
     if not pares:
         return []
+    checkpoint_path = checkpoint_path or checkpoint_padrao()
     if not checkpoint_path.exists():
         def item(peca: Peca, tipo: int) -> PreparedItem:
             return PreparedItem(peca.id, "", "", tipo, peca.embedding)
@@ -239,13 +248,23 @@ def _vetores_contextos() -> tuple[list[str], torch.Tensor, float]:
     return nomes, saida / saida.norm(dim=-1, keepdim=True), escala
 
 
-def _ajustes_ocasiao(pecas: list[Peca], ocasiao: Ocasiao) -> dict[str, float]:
-    """Adequacao (0-1) de cada peca a ocasiao, usando o vetor CLIP da foto
-    que ja esta no embedding (indices 11-522) — sem rodar o CLIP na imagem."""
+def probabilidades_contextos(embeddings: np.ndarray) -> dict[str, np.ndarray]:
+    """Probabilidade de cada contexto de CONTEXTOS_CLIP (softmax entre eles)
+    para embeddings de 523 numeros, usando o vetor CLIP da foto que ja esta
+    no embedding (indices 11-522) — sem rodar o CLIP na imagem."""
     nomes, textos, escala = _vetores_contextos()
-    imagens = torch.from_numpy(np.stack([p.embedding[11:] for p in pecas]).astype(np.float32))
+    imagens = torch.from_numpy(np.asarray(embeddings, dtype=np.float32).reshape(-1, 523)[:, 11:])
     imagens = imagens / imagens.norm(dim=-1, keepdim=True)
     probs = (escala * imagens @ textos.T).softmax(dim=-1).numpy()
+    return {nome: probs[:, i] for i, nome in enumerate(nomes)}
+
+
+def _ajustes_ocasiao(pecas: list[Peca], ocasiao: Ocasiao) -> dict[str, float]:
+    """Adequacao (0-1) de cada peca a ocasiao (soma das probabilidades dos
+    contextos que servem pra ela)."""
+    nomes = list(CONTEXTOS_CLIP)
+    por_contexto = probabilidades_contextos(np.stack([p.embedding for p in pecas]))
+    probs = np.stack([por_contexto[n] for n in nomes], axis=1)
     colunas = [nomes.index(c) for c in ocasiao.contextos]
     aceitos = probs[:, colunas].sum(axis=1)
     return {p.id: min(1.0, float(a) / LIMIAR_OCASIAO) for p, a in zip(pecas, aceitos)}
@@ -267,7 +286,7 @@ def _permitido(look: list[Peca], ocasiao: Ocasiao | None, clima: Clima | None) -
     return True
 
 
-def _compatibilidades(candidatos: list[list[Peca]], checkpoint_path: Path) -> list[float]:
+def _compatibilidades(candidatos: list[list[Peca]], checkpoint_path: Path | None) -> list[float]:
     """Score do par (cima, baixo); com camada, mistura o par (camada, baixo)
     com peso PESO_CAMADA. Cada par unico passa pelo modelo uma vez so."""
     pares: dict[tuple[str, str], tuple[Peca, Peca]] = {}
@@ -317,7 +336,7 @@ def recomendar(
     ocasiao: str | None = None,
     clima: str | None = None,
     top_k: int = 12,
-    checkpoint_path: Path = DEFAULT_OUTPUT,
+    checkpoint_path: Path | None = None,
 ) -> list[dict[str, Any]]:
     """Devolve ate `top_k` looks como {"pecas": [ids], "score", "detalhes"},
     na ordem em que devem ser mostrados."""
