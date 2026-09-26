@@ -41,6 +41,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Calcula so N pecas e nao reescreve os caches (pra medir o tempo).",
     )
+    parser.add_argument(
+        "--manter-falhas",
+        action="store_true",
+        help="Reescreve os caches mesmo com falhas, mantendo a cor antiga dessas pecas "
+        "(ex.: imagem que nao existe mais e vai falhar sempre).",
+    )
     return parser.parse_args()
 
 
@@ -87,11 +93,9 @@ def main() -> None:
     os.environ["OMP_NUM_THREADS"] = str(args.threads_por_processo)
     tarefas = [(i, str(args.images_dir / f"{i}.jpg")) for i in pendentes]
     inicio = time.time()
-    falhas = 0
     with Pool(args.processos) as pool:
         for n, (item_id, vetor, erro) in enumerate(pool.imap_unordered(_calcular, tarefas, chunksize=4), start=1):
             if vetor is None:
-                falhas += 1
                 print(f"[aviso] {item_id}: {erro}")
             else:
                 cores[item_id] = np.asarray(vetor, dtype=np.float32)
@@ -104,9 +108,16 @@ def main() -> None:
     if args.limite is not None:
         print("[cores] --limite: caches nao foram alterados")
         return
-    if falhas:
-        print(f"[cores] {falhas} falhas; rode de novo pra tentar essas pecas antes de reescrever os caches")
+    # Conta as falhas desta execucao e as que ficaram pendentes de antes.
+    sem_cor = [i for i in ids if i not in cores]
+    if sem_cor and not args.manter_falhas:
+        print(
+            f"[cores] {len(sem_cor)} pecas sem cor nova; rode de novo pra tentar essas pecas, "
+            "ou use --manter-falhas pra reescrever os caches mantendo a cor antiga delas"
+        )
         return
+    if sem_cor:
+        print(f"[cores] --manter-falhas: {len(sem_cor)} pecas ficam com a cor antiga")
 
     for path, embeddings in caches.items():
         backup = path.with_suffix(".antes_cores.npz")
@@ -114,6 +125,8 @@ def main() -> None:
             path.replace(backup)
         mudaram = 0
         for item_id, embedding in embeddings.items():
+            if item_id not in cores:
+                continue
             novo = embedding.copy()
             novo[:N_CORES] = cores[item_id]
             mudaram += not np.allclose(novo[:N_CORES], embedding[:N_CORES], atol=1e-3)

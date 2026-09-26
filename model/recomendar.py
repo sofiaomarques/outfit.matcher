@@ -108,9 +108,13 @@ OCASIOES = {
     "festa": Ocasiao(frozenset({"festa", "encontro"})),
 }
 
-# Calor nunca gera looks com camada, entao jaqueta/casaco ja ficam de fora.
+# Calor nunca gera looks com camada; jaqueta/casaco so aparecem quando fazem
+# o papel da peca de cima (ver _gerar_candidatos), e ai penalizados.
 CLIMAS = {
-    "calor": Clima("nunca", penalidades={BLUSA_MANGA: 0.6, CALCA: 0.85}),
+    "calor": Clima(
+        "nunca",
+        penalidades={BLUSA_MANGA: 0.6, CALCA: 0.85, JAQUETA: 0.7, CASACO: 0.5},
+    ),
     "frio": Clima(
         "sempre",
         frozenset({SHORT}),
@@ -229,10 +233,17 @@ def _gerar_candidatos(pecas: list[Peca], clima: Clima | None) -> list[list[Peca]
         if peca.papel:
             por_papel[peca.papel].append(peca)
 
-    bases = [[cima, baixo] for cima, baixo in product(por_papel["cima"], por_papel["baixo"])]
+    cimas, camadas = por_papel["cima"], por_papel["camada"]
+    if not cimas:
+        # Sem nenhum top comum, jaqueta/casaco vira a peca de cima: a usuaria
+        # marcou como top e o codigo fino vem do CLIP, que erra ~5% dos tops
+        # (cardiga detectado como jaqueta). Sem isso ela ficaria sem nenhum look.
+        cimas, camadas = camadas, []
+
+    # Ordem fixa das pecas: [cima, baixo] ou [unica], e a camada no fim.
+    bases = [[cima, baixo] for cima, baixo in product(cimas, por_papel["baixo"])]
     bases += [[unica] for unica in por_papel["unica"]]
 
-    camadas = por_papel["camada"]
     modo = clima.camada if clima else "opcional"
     if modo == "nunca" or not camadas:
         return bases
@@ -295,13 +306,20 @@ def _permitido(look: list[Peca], ocasiao: Ocasiao | None, clima: Clima | None) -
 def _compatibilidades(candidatos: list[list[Peca]], checkpoint_path: Path | None) -> list[float]:
     """Score do par (cima, baixo); com camada, mistura o par (camada, baixo)
     com peso PESO_CAMADA. Cada par unico passa pelo modelo uma vez so."""
+    # Pela posicao (ver _gerar_candidatos), nao pelo papel: a peca de cima
+    # pode ser uma jaqueta quando nao ha outro top.
+    def partes(look: list[Peca]) -> tuple[Peca, Peca | None, Peca | None]:
+        if look[0].papel == "unica":
+            return look[0], None, look[1] if len(look) > 1 else None
+        return look[0], look[1], look[2] if len(look) > 2 else None
+
     pares: dict[tuple[str, str], tuple[Peca, Peca]] = {}
     for look in candidatos:
-        baixo = next((p for p in look if p.papel == "baixo"), None)
+        cima, baixo, camada = partes(look)
         if baixo is None:
             continue
-        for peca in look:
-            if peca.papel in ("cima", "camada"):
+        for peca in (cima, camada):
+            if peca is not None:
                 pares[(peca.id, baixo.id)] = (peca, baixo)
 
     chaves = list(pares)
@@ -309,12 +327,10 @@ def _compatibilidades(candidatos: list[list[Peca]], checkpoint_path: Path | None
 
     resultado = []
     for look in candidatos:
-        baixo = next((p for p in look if p.papel == "baixo"), None)
+        cima, baixo, camada = partes(look)
         if baixo is None:
             resultado.append(COMPATIBILIDADE_VESTIDO)
         else:
-            cima = next(p for p in look if p.papel == "cima")
-            camada = next((p for p in look if p.papel == "camada"), None)
             compat = scores[(cima.id, baixo.id)]
             if camada is not None:
                 compat = (1 - PESO_CAMADA) * compat + PESO_CAMADA * scores[(camada.id, baixo.id)]
