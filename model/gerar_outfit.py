@@ -8,7 +8,7 @@ import torch
 
 from features.embedding_neural import gerar_embedding_completo
 from model.preparar_dados import PreparedItem, weak_compatibility
-from model.treinar import DEFAULT_OUTPUT, choose_device, load_model
+from model.treinar import DEFAULT_OUTPUT, choose_device, load_model, select_features
 
 TIPO_BAIXO = 1
 TIPO_UNICA = 2
@@ -39,8 +39,8 @@ def _pontuar_com_modelo(
     mean = np.asarray(checkpoint["mean"], dtype=np.float32)
     std = np.asarray(checkpoint["std"], dtype=np.float32)
 
-    emb_a = np.stack([(a.embedding - mean) / std for a, _ in pares]).astype(np.float32)
-    emb_b = np.stack([(b.embedding - mean) / std for _, b in pares]).astype(np.float32)
+    emb_a = np.stack([(select_features(a.embedding, checkpoint) - mean) / std for a, _ in pares]).astype(np.float32)
+    emb_b = np.stack([(select_features(b.embedding, checkpoint) - mean) / std for _, b in pares]).astype(np.float32)
 
     with torch.no_grad():
         logits = model(torch.from_numpy(emb_a).to(device), torch.from_numpy(emb_b).to(device))

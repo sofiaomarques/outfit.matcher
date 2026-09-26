@@ -15,6 +15,16 @@ DEFAULT_PAIRS = Path("dados/pares_outfits.npz")
 DEFAULT_OUTPUT = Path("model/match_model.pt")
 DEFAULT_HISTORY = Path("model/historico_treino.csv")
 
+# Indices do embedding de 523 numeros (features/embedding_neural.py):
+# 0-5 cores, 6 tonalidade, 7 categoria, 8 tipo (cima/baixo), 9 estampa,
+# 10 formalidade, 11-522 CLIP. Categoria e tipo vem do rotulo do usuario no
+# app, entao os conjuntos "clip" e "clip_regra" nao os usam.
+FEATURE_SETS = {
+    "completo": list(range(523)),
+    "clip": list(range(11, 523)),
+    "clip_regra": [0, 1, 2, 3, 4, 5, 6, 9, 10] + list(range(11, 523)),
+}
+
 
 class PairDataset(Dataset):
     def __init__(
@@ -100,6 +110,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", choices=("auto", "cpu", "mps"), default="auto")
     parser.add_argument("--threshold", type=float, default=0.5)
     parser.add_argument("--no-swap-augmentation", action="store_true")
+    parser.add_argument("--features", choices=sorted(FEATURE_SETS), default="completo")
     return parser.parse_args()
 
 
@@ -141,6 +152,19 @@ def load_pairs(path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     if labels.sum() == 0 or labels.sum() == len(labels):
         raise ValueError("O dataset precisa ter exemplos positivos e negativos.")
     return emb_a, emb_b, labels
+
+
+def load_split(path: Path) -> np.ndarray | None:
+    """Split treino/val por peca salvo pelo preparar_pares_v2 (None nos pares antigos)."""
+    data = np.load(path, allow_pickle=False)
+    return data["split"].astype(str) if "split" in data.files else None
+
+
+def select_features(embedding: np.ndarray, checkpoint: dict[str, Any]) -> np.ndarray:
+    """Recorta o embedding de 523 numeros para as features que o checkpoint usa."""
+    feature_idx = checkpoint.get("feature_idx")
+    embedding = np.asarray(embedding, dtype=np.float32)
+    return embedding if feature_idx is None else embedding[..., feature_idx]
 
 
 def split_indices(labels: np.ndarray, val_size: float, seed: int) -> tuple[np.ndarray, np.ndarray]:
@@ -262,6 +286,7 @@ def save_checkpoint(
     threshold: float,
     epoch: int,
     evaluation: dict[str, float],
+    feature_idx: list[int],
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(
@@ -275,6 +300,7 @@ def save_checkpoint(
             "threshold": threshold,
             "epoch": epoch,
             "metrics": evaluation,
+            "feature_idx": feature_idx,
         },
         path,
     )
@@ -315,8 +341,8 @@ def predict_score(
     model, checkpoint = load_model(Path(checkpoint_path), torch_device)
     mean = np.asarray(checkpoint["mean"], dtype=np.float32)
     std = np.asarray(checkpoint["std"], dtype=np.float32)
-    a = (np.asarray(embedding_a, dtype=np.float32).reshape(1, -1) - mean) / std
-    b = (np.asarray(embedding_b, dtype=np.float32).reshape(1, -1) - mean) / std
+    a = (select_features(np.reshape(embedding_a, (1, -1)), checkpoint) - mean) / std
+    b = (select_features(np.reshape(embedding_b, (1, -1)), checkpoint) - mean) / std
     logits = model(torch.from_numpy(a).to(torch_device), torch.from_numpy(b).to(torch_device))
     return float(torch.sigmoid(logits).cpu().numpy().reshape(-1)[0])
 
@@ -326,7 +352,13 @@ def main() -> None:
     set_seed(args.seed)
     device = choose_device(args.device)
     emb_a, emb_b, labels = load_pairs(args.pairs)
-    train_idx, val_idx = split_indices(labels, args.val_size, args.seed)
+    feature_idx = FEATURE_SETS[args.features]
+    emb_a, emb_b = emb_a[:, feature_idx], emb_b[:, feature_idx]
+    split = load_split(args.pairs)
+    if split is not None:
+        train_idx, val_idx = np.flatnonzero(split == "treino"), np.flatnonzero(split == "val")
+    else:
+        train_idx, val_idx = split_indices(labels, args.val_size, args.seed)
     mean, std = fit_standardizer(emb_a, emb_b, train_idx)
 
     train_dataset = PairDataset(emb_a, emb_b, labels, mean, std, not args.no_swap_augmentation)
@@ -343,7 +375,7 @@ def main() -> None:
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=2)
 
     print(f"[treino] pares={len(labels)} treino={len(train_idx)} validacao={len(val_idx)}")
-    print(f"[treino] dimensao={emb_a.shape[1]} device={device}")
+    print(f"[treino] features={args.features} dimensao={emb_a.shape[1]} device={device}")
     best_val_loss = float("inf")
     without_improvement = 0
     history: list[dict[str, float]] = []
@@ -372,7 +404,7 @@ def main() -> None:
         if val_loss < best_val_loss - 1e-5:
             best_val_loss = val_loss
             without_improvement = 0
-            save_checkpoint(args.output, model, mean, std, threshold, epoch, evaluation)
+            save_checkpoint(args.output, model, mean, std, threshold, epoch, evaluation, feature_idx)
             print(f"[treino] melhor modelo salvo em {args.output}")
         else:
             without_improvement += 1
