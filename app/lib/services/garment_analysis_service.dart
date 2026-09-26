@@ -1,9 +1,24 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'dart:ui';
+
 import 'package:http/http.dart' as http;
 
 import 'api_config.dart';
+
+/// Cor principal extraída pela API (`cor_principal`, RGB), pra usar como
+/// swatch da peça. Nula se a peça não foi analisada.
+Color? swatchFromFeatures(Map<String, dynamic>? features) {
+  final rgb = features?['cor_principal'] as List<dynamic>?;
+  if (rgb == null || rgb.length != 3) return null;
+  return Color.fromARGB(
+    255,
+    (rgb[0] as num).toInt(),
+    (rgb[1] as num).toInt(),
+    (rgb[2] as num).toInt(),
+  );
+}
 
 /// Cliente da API Python que roda o pipeline de `features/*.py`
 /// (`api/main.py`): recorta a peça da foto e extrai as features (cor,

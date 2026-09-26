@@ -22,7 +22,7 @@ from fastapi.responses import Response
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from features.embedding_neural import gerar_embedding_completo
+from features.embedding_neural import VERSAO_FEATURES, gerar_embedding_completo
 from features.recorte import recortar_peca
 from model.recomendar import CLIMAS, OCASIOES, peca_de_features, recomendar
 
@@ -102,6 +102,7 @@ async def analyze_item(file: UploadFile = File(...)) -> dict:
         "estampa": estampa["codigo"],
         "formalidade": formalidade["codigo"],
         "embedding": embedding,
+        "versao_features": VERSAO_FEATURES,
     }
 
 

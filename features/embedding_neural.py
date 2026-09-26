@@ -6,6 +6,11 @@ from features.estampa import classificar_estampa
 from features.formalidade import classificar_formalidade
 from features._clip_shared import model, processor
 
+# Suba quando mudar o calculo das features: o app reanalisa as pecas salvas
+# com versao menor (RecommendationService.featuresVersion, em Dart).
+# 2: cor principal = cluster com mais pixels; mascara sem a borda suave.
+VERSAO_FEATURES = 2
+
 
 def extrair_vetor_clip(inputs):
     """Compatibilidade entre versoes do transformers: sempre retorna 512 valores."""

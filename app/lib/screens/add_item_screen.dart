@@ -142,7 +142,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
         name: _nameController.text.trim(),
         category: _category,
         imageBytes: _imageBytes!,
-        swatch: _corPrincipal(features) ?? AppColors.pink,
+        swatch: swatchFromFeatures(features) ?? AppColors.pink,
         features: features,
       );
       if (mounted) Navigator.of(context).pop(true);
@@ -156,17 +156,6 @@ class _AddItemScreenState extends State<AddItemScreen> {
         });
       }
     }
-  }
-
-  Color? _corPrincipal(Map<String, dynamic>? features) {
-    final rgb = features?['cor_principal'] as List<dynamic>?;
-    if (rgb == null || rgb.length != 3) return null;
-    return Color.fromARGB(
-      255,
-      (rgb[0] as num).toInt(),
-      (rgb[1] as num).toInt(),
-      (rgb[2] as num).toInt(),
-    );
   }
 
   @override

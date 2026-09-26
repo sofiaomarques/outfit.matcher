@@ -88,11 +88,12 @@ class WardrobeRepository {
 
   Future<void> updateFeatures(
     ClothingItem item,
-    Map<String, dynamic> features,
-  ) {
+    Map<String, dynamic> features, {
+    Color? swatch,
+  }) {
     return _client
         .from(_table)
-        .update({'features': features})
+        .update({'features': features, 'swatch_color': ?swatch?.toARGB32()})
         .eq('id', item.id);
   }
 

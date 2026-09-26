@@ -38,16 +38,26 @@ class RecommendationService {
   final WardrobeRepository _repository;
   final GarmentAnalysisService _analysisService;
 
-  /// Busca o guarda-roupa e analisa as peças que ainda não têm features
-  /// (cadastradas antes da análise automática, ou com a API fora do ar no
-  /// upload), salvando o resultado no Supabase. Peças cuja análise falhar
-  /// voltam sem features — o recomendador só as ignora.
+  /// Mesmo valor de `VERSAO_FEATURES` em `features/embedding_neural.py`.
+  /// Peças analisadas com versão anterior são reanalisadas.
+  static const featuresVersion = 2;
+
+  static bool _needsAnalysis(ClothingItem item) {
+    final version = item.features?['versao_features'] as int? ?? 1;
+    return item.features == null || version < featuresVersion;
+  }
+
+  /// Busca o guarda-roupa e analisa as peças sem features (cadastradas
+  /// antes da análise automática, ou com a API fora do ar no upload) ou com
+  /// features de uma versão antiga do pipeline, salvando o resultado no
+  /// Supabase. Se a análise falhar, a peça fica como estava — sem features,
+  /// o recomendador só a ignora.
   Future<List<ClothingItem>> loadWardrobe({
     void Function(int done, int total)? onProgress,
   }) async {
     final items = await _repository.fetchItems();
     final missing = items
-        .where((item) => item.features == null && item.storagePath != null)
+        .where((item) => _needsAnalysis(item) && item.storagePath != null)
         .toList();
     if (missing.isEmpty) return items;
 
@@ -57,8 +67,9 @@ class RecommendationService {
       try {
         final bytes = await _repository.downloadImage(item);
         final features = await _analysisService.analisarPeca(bytes);
-        await _repository.updateFeatures(item, features);
-        analyzed[item.id] = item.copyWith(features: features);
+        final swatch = swatchFromFeatures(features);
+        await _repository.updateFeatures(item, features, swatch: swatch);
+        analyzed[item.id] = item.copyWith(swatch: swatch, features: features);
       } catch (_) {
         // Segue sem essa peça; tenta de novo na próxima vez que a tela abrir.
       }

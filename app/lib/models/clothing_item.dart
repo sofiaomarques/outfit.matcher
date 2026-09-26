@@ -41,12 +41,16 @@ class ClothingItem {
   /// recomendador ignora peças sem features.
   final Map<String, dynamic>? features;
 
-  ClothingItem copyWith({bool? isFavorite, Map<String, dynamic>? features}) {
+  ClothingItem copyWith({
+    Color? swatch,
+    bool? isFavorite,
+    Map<String, dynamic>? features,
+  }) {
     return ClothingItem(
       id: id,
       name: name,
       category: category,
-      swatch: swatch,
+      swatch: swatch ?? this.swatch,
       imagePath: imagePath,
       imageUrl: imageUrl,
       storagePath: storagePath,
