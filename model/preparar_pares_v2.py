@@ -128,7 +128,8 @@ def sample_styles(styles: pd.DataFrame, per_type: int, cached_ids: set[str], see
 
 
 def build_embeddings(styles: pd.DataFrame, embedding_fn, cache_path: Path, cache_v1: Path) -> dict[str, np.ndarray]:
-    known = {**load_cache(cache_v1), **load_cache(cache_path)}
+    cache = load_cache(cache_path)
+    known = {**load_cache(cache_v1), **cache}
     embeddings: dict[str, np.ndarray] = {}
     faltando = [row for _, row in styles.iterrows() if str(row["id"]) not in known]
     print(f"[v2] embeddings reaproveitados: {len(styles) - len(faltando)}, a calcular: {len(faltando)}")
@@ -145,10 +146,12 @@ def build_embeddings(styles: pd.DataFrame, embedding_fn, cache_path: Path, cache
         except Exception as exc:
             print(f"[aviso] pulando {item_id}: {exc}")
         if index % 50 == 0:
-            save_cache(cache_path, embeddings)
+            save_cache(cache_path, {**cache, **embeddings})
             print(f"[v2] embeddings novos: {index}/{len(faltando)}", flush=True)
 
-    save_cache(cache_path, embeddings)
+    # Salva junto com o que ja estava no cache: uma amostra menor (outro
+    # --items-per-article-type ou --seed) nao apaga embeddings ja calculados.
+    save_cache(cache_path, {**cache, **embeddings})
     return embeddings
 
 
