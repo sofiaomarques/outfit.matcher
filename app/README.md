@@ -1,12 +1,11 @@
 # outfit_matcher (app)
 
 Interface do Outfit Matcher em Flutter (web + iOS + Android), construída
-a partir do mockup do projeto. Os **looks sugeridos** ("Seus looks", "Look
-do dia") ainda usam dados fake em `lib/data/mock_wardrobe.dart` — a troca
-pelo pipeline real em Python (`model/gerar_outfit.py`) fica pra depois, já
-que o formato dos looks (`Outfit.items` + `score`) segue o mesmo contrato
-que o modelo retorna. O **guarda-roupa** (peças cadastradas pelo usuário)
-já é real, guardado no Supabase — ver [`../supabase/schema.sql`](../supabase/schema.sql).
+a partir do mockup do projeto. O **guarda-roupa** (peças cadastradas pelo
+usuário) fica no Supabase — ver [`../supabase/schema.sql`](../supabase/schema.sql).
+A análise das fotos e os **looks sugeridos** ("Novo look", "Seus looks") vêm
+da API Python ([`../api/main.py`](../api/main.py)), que roda o recomendador
+em [`../model/recomendar.py`](../model/recomendar.py).
 
 ## Configurando o Supabase
 
@@ -15,9 +14,11 @@ O app precisa de um projeto Supabase (banco Postgres + storage de arquivos
 
 1. Crie um projeto grátis em [supabase.com](https://supabase.com).
 2. No SQL Editor do projeto, rode o conteúdo de
-   [`../supabase/schema.sql`](../supabase/schema.sql) — isso cria a
-   tabela `clothing_items`, as políticas de Row Level Security e o bucket
-   privado `clothing-images`.
+   [`../supabase/schema.sql`](../supabase/schema.sql) — isso cria as
+   tabelas (`clothing_items`, `wishlist_items`, `outfit_favorites`,
+   `outfit_wears`, `outfit_rejections`), as políticas de Row Level Security e os buckets
+   privados de fotos. Se o projeto já tinha rodado uma versão anterior do
+   script, rode só a parte nova (os `create policy` falham se repetidos).
 3. Em Project Settings > API, copie a **Project URL** e a **anon/public
    key**.
 4. Ative "Confirm email" em Authentication > Providers > Email se quiser
@@ -36,13 +37,23 @@ flutter run -d chrome \
 Sem essas duas variáveis o app sobe mostrando uma tela avisando que a
 configuração está ausente, sem quebrar.
 
+Em outro terminal, na raiz do repositório, suba a API (recorte, análise das
+fotos e sugestão de looks). O app procura em `http://localhost:8000`; pra
+outro endereço, passe `--dart-define=API_BASE_URL=...`.
+
+```bash
+PYTHONPATH=. .venv/bin/uvicorn api.main:app --reload
+```
+
 ## Estrutura
 
 - `lib/theme/` — paleta de cores e tipografia
 - `lib/models/` — `ClothingItem`, `Outfit`, categorias
-- `lib/data/` — mock dos looks sugeridos (ainda não conectados ao pipeline Python)
-- `lib/repositories/` — `WardrobeRepository`, acesso ao guarda-roupa no Supabase
-- `lib/services/` — configuração do Supabase (`SupabaseConfig`)
+- `lib/repositories/` — acesso ao Supabase: guarda-roupa, wishlist e
+  histórico de looks (`OutfitHistoryRepository`)
+- `lib/services/` — configuração do Supabase e da API, análise de fotos
+  (`GarmentAnalysisService`), sugestão de looks (`RecommendationService`) e
+  favoritos/uso dos looks compartilhados entre as telas (`OutfitHistory`)
 - `lib/widgets/` — componentes reutilizáveis (nav, cards, peça, estrela decorativa)
 - `lib/screens/` — telas (boas-vindas, login/cadastro, guarda-roupa, nova peça, looks, detalhe do look)
 
@@ -54,13 +65,32 @@ configuração está ausente, sem quebrar.
   foto (câmera ou galeria), nome e categoria, e salvar.
 - A foto vai pro bucket `clothing-images` (privado, uma pasta por
   usuário) e os metadados pra tabela `clothing_items`.
-- A cor de placeholder e a categoria são as que o usuário escolhe na hora
-  do cadastro — o pipeline de extração de features em Python
-  (`features/cores.py`, `features/categoria.py`) ainda não roda sobre o
-  upload. A coluna `features` na tabela já existe pronta pra isso, como
-  próximo passo.
+- Ao escolher a foto, a API recorta a peça (`/items/crop`) e, em paralelo,
+  analisa a foto original (`/items/analyze`): cor real, categoria
+  detectada, formalidade e o embedding usado pelo recomendador, salvos na
+  coluna `features`. A categoria que vale é a escolhida pelo usuário.
+- Peças salvas com a API fora do ar (ou antes dessa análise existir) ficam
+  com `features` nulo e são analisadas na próxima vez que "Novo look" ou
+  "Seus looks" abrir.
+
+## Favoritos, rejeições e histórico de uso
+
+- O coração de um look (em "Novo look", "Looks" ou no detalhe) salva o look
+  na tabela `outfit_favorites`; a aba "Favoritos" lista os looks salvos.
+- No detalhe do look, "Usei hoje" grava o dia em `outfit_wears` e a tela
+  passa a mostrar há quanto tempo o look foi usado.
+- Um look é identificado pelo conjunto das peças (ids em ordem crescente),
+  então o mesmo look sugerido de novo já aparece favoritado.
+- Em "Novo look", "Não curti" grava o look em `outfit_rejections` junto com
+  a ocasião, e dá pra desfazer pelo aviso que aparece.
+- Tudo isso vai junto no pedido de looks e muda as sugestões
+  ([`../model/feedback.py`](../model/feedback.py)):
+  - o look rejeitado some naquela ocasião;
+  - combinações que repetem pares de peças favoritados ganham pontos, e as
+    que repetem pares rejeitados perdem;
+  - um look usado há pouco perde pontos e volta ao topo em uns 2–3 dias.
 
 ## Telas ainda não desenhadas
 
-"Favoritos" e "Configurações" existem só como placeholder no menu — não
-faziam parte do mockup original.
+"Configurações" existe só como placeholder no menu — não fazia parte do
+mockup original.

@@ -3,10 +3,9 @@ import 'package:flutter/material.dart';
 import '../models/outfit.dart';
 import '../theme/app_colors.dart';
 import 'garment_thumbnail.dart';
-import 'star_shape.dart';
 
-/// Card de um look: colagem das peças que o compõem, com favoritar
-/// e "salvar" (estrela), igual aos cards de "Seus looks" no mockup.
+/// Card de um look: colagem das peças que o compõem, com favoritar,
+/// igual aos cards de "Seus looks" no mockup.
 ///
 /// As miniaturas ficam numa única linha e se redimensionam pro espaço
 /// disponível, então o card nunca estoura mesmo com poucas colunas.
@@ -16,14 +15,12 @@ class OutfitCard extends StatelessWidget {
     required this.outfit,
     required this.isFavorite,
     required this.onFavoriteToggle,
-    this.onSave,
     this.onTap,
   });
 
   final Outfit outfit;
   final bool isFavorite;
   final VoidCallback onFavoriteToggle;
-  final VoidCallback? onSave;
   final VoidCallback? onTap;
 
   @override
@@ -63,14 +60,6 @@ class OutfitCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if (onSave != null) ...[
-                const SizedBox(height: 4),
-                InkWell(
-                  onTap: onSave,
-                  borderRadius: BorderRadius.circular(20),
-                  child: const StarShape(size: 20, color: AppColors.wine),
-                ),
-              ],
             ],
           ),
         ),

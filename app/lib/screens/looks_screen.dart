@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 
-import '../data/mock_wardrobe.dart';
+import '../models/clothing_item.dart';
 import '../models/outfit.dart';
+import '../repositories/wardrobe_repository.dart';
+import '../services/outfit_history.dart';
+import '../services/recommendation_service.dart';
 import '../theme/app_colors.dart';
+import '../widgets/looks_status.dart';
+import '../widgets/outfit_actions.dart';
 import '../widgets/outfit_card.dart';
 import 'outfit_detail_screen.dart';
 
@@ -13,7 +18,9 @@ const List<String> _weatherFilters = [
   'Chuva',
 ];
 
-/// Tela "Seus looks": grade paginada com os looks sugeridos.
+/// Tela "Seus looks": grade paginada com os looks sugeridos pelo
+/// recomendador (`model/recomendar.py`) a partir do guarda-roupa real,
+/// refeitos a cada troca do filtro de clima.
 class LooksScreen extends StatefulWidget {
   const LooksScreen({super.key});
 
@@ -23,11 +30,28 @@ class LooksScreen extends StatefulWidget {
 
 class _LooksScreenState extends State<LooksScreen> {
   static const _perPage = 6;
+  static const _lookCount = 24;
 
-  final Set<String> _favoriteIds = {};
+  final _recommender = RecommendationService(WardrobeRepository());
   String _weather = _weatherFilters.first;
   final PageController _pageController = PageController();
   int _page = 0;
+
+  List<ClothingItem>? _items;
+  List<Outfit> _outfits = [];
+  bool _isLoading = true;
+  String _loadingText = 'Carregando seu guarda-roupa...';
+  String? _errorText;
+  // Trocar de clima rápido dispara pedidos em paralelo; só o último vale.
+  int _requestId = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadWardrobe();
+    // Sem o histórico, os corações só começam vazios; não trava os looks.
+    OutfitHistory.instance.load().ignore();
+  }
 
   @override
   void dispose() {
@@ -35,8 +59,75 @@ class _LooksScreenState extends State<LooksScreen> {
     super.dispose();
   }
 
+  Future<void> _loadWardrobe() async {
+    setState(() {
+      _isLoading = true;
+      _loadingText = 'Carregando seu guarda-roupa...';
+      _errorText = null;
+    });
+    try {
+      final items = await _recommender.loadWardrobe(
+        onProgress: (done, total) {
+          if (mounted) {
+            setState(
+              () => _loadingText = 'Analisando suas peças ($done/$total)...',
+            );
+          }
+        },
+      );
+      if (!mounted) return;
+      _items = items;
+      await _recommend();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _errorText = 'Não foi possível carregar seu guarda-roupa.';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _recommend() async {
+    final items = _items;
+    if (items == null) return;
+    final requestId = ++_requestId;
+    setState(() {
+      _isLoading = true;
+      _loadingText = 'Montando seus looks...';
+      _errorText = null;
+    });
+    try {
+      final outfits = await _recommender.recommend(
+        items,
+        weather: _weather,
+        topK: _lookCount,
+      );
+      if (!mounted || requestId != _requestId) return;
+      setState(() {
+        _outfits = outfits;
+        _isLoading = false;
+        _page = 0;
+      });
+      if (_pageController.hasClients) _pageController.jumpToPage(0);
+    } catch (error) {
+      if (!mounted || requestId != _requestId) return;
+      setState(() {
+        _errorText = error is NoAnalyzedItemsException
+            ? 'Não foi possível analisar suas peças. '
+                  'Confira se a API está rodando.'
+            : 'Não foi possível gerar os looks. Confira se a API está rodando.';
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _selectWeather(String weather) {
+    setState(() => _weather = weather);
+    _recommend();
+  }
+
   List<List<Outfit>> get _pages {
-    final outfits = MockWardrobe.outfits;
+    final outfits = _outfits;
     return [
       for (var i = 0; i < outfits.length; i += _perPage)
         outfits.sublist(
@@ -49,6 +140,53 @@ class _LooksScreenState extends State<LooksScreen> {
   void _openDetail(Outfit outfit) {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => OutfitDetailScreen(outfit: outfit)),
+    );
+  }
+
+  Widget _buildBody(List<List<Outfit>> pages) {
+    if (_isLoading) {
+      return LooksStatus(message: _loadingText, isLoading: true);
+    }
+    if (_errorText != null) {
+      return LooksStatus(
+        message: _errorText!,
+        onRetry: _items == null ? _loadWardrobe : _recommend,
+      );
+    }
+    if (pages.isEmpty) {
+      return const LooksStatus(
+        message:
+            'Ainda não dá pra montar looks: cadastre pelo menos uma peça '
+            'de cima e uma de baixo, ou um vestido.',
+      );
+    }
+    return PageView(
+      controller: _pageController,
+      onPageChanged: (page) => setState(() => _page = page),
+      children: [
+        for (final page in pages)
+          GridView.builder(
+            itemCount: page.length,
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 260,
+              mainAxisSpacing: 20,
+              crossAxisSpacing: 20,
+              childAspectRatio: 1.15,
+            ),
+            itemBuilder: (context, index) {
+              final outfit = page[index];
+              return ListenableBuilder(
+                listenable: OutfitHistory.instance,
+                builder: (context, _) => OutfitCard(
+                  outfit: outfit,
+                  isFavorite: OutfitHistory.instance.isFavorite(outfit),
+                  onFavoriteToggle: () => toggleOutfitFavorite(context, outfit),
+                  onTap: () => _openDetail(outfit),
+                ),
+              );
+            },
+          ),
+      ],
     );
   }
 
@@ -68,50 +206,11 @@ class _LooksScreenState extends State<LooksScreen> {
                   style: Theme.of(context).textTheme.headlineLarge,
                 ),
                 const Spacer(),
-                _WeatherDropdown(
-                  value: _weather,
-                  onChanged: (value) => setState(() => _weather = value),
-                ),
+                _WeatherDropdown(value: _weather, onChanged: _selectWeather),
               ],
             ),
             const SizedBox(height: 20),
-            Expanded(
-              child: PageView(
-                controller: _pageController,
-                onPageChanged: (page) => setState(() => _page = page),
-                children: [
-                  for (final page in pages)
-                    GridView.builder(
-                      itemCount: page.length,
-                      gridDelegate:
-                          const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 260,
-                            mainAxisSpacing: 20,
-                            crossAxisSpacing: 20,
-                            childAspectRatio: 1.15,
-                          ),
-                      itemBuilder: (context, index) {
-                        final outfit = page[index];
-                        return OutfitCard(
-                          outfit: outfit,
-                          isFavorite: _favoriteIds.contains(outfit.id),
-                          onFavoriteToggle: () => setState(() {
-                            if (!_favoriteIds.remove(outfit.id)) {
-                              _favoriteIds.add(outfit.id);
-                            }
-                          }),
-                          onTap: () => _openDetail(outfit),
-                          onSave: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Look salvo!')),
-                            );
-                          },
-                        );
-                      },
-                    ),
-                ],
-              ),
-            ),
+            Expanded(child: _buildBody(pages)),
             if (pages.length > 1) ...[
               const SizedBox(height: 12),
               _PageIndicator(

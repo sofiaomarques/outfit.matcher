@@ -1,31 +1,24 @@
 import 'package:flutter/material.dart';
 
 import '../models/outfit.dart';
+import '../services/outfit_history.dart';
 import '../theme/app_colors.dart';
 import '../widgets/garment_thumbnail.dart';
+import '../widgets/outfit_actions.dart';
 import '../widgets/star_shape.dart';
 
 /// Tela de detalhe de um look ("Look do dia" no mockup): colagem maior
-/// das peças, tags e paleta de cores, com opção de salvar.
-class OutfitDetailScreen extends StatefulWidget {
+/// das peças, tags e paleta de cores, com salvar nos favoritos e marcar
+/// como usado hoje (ver [OutfitHistory]).
+class OutfitDetailScreen extends StatelessWidget {
   const OutfitDetailScreen({super.key, required this.outfit, this.title});
 
   final Outfit outfit;
   final String? title;
 
   @override
-  State<OutfitDetailScreen> createState() => _OutfitDetailScreenState();
-}
-
-class _OutfitDetailScreenState extends State<OutfitDetailScreen> {
-  bool _saved = false;
-
-  @override
   Widget build(BuildContext context) {
-    final outfit = widget.outfit;
-    final palette = [
-      for (final item in outfit.items) item.swatch,
-    ];
+    final palette = [for (final item in outfit.items) item.swatch];
 
     return Scaffold(
       body: SafeArea(
@@ -43,9 +36,8 @@ class _OutfitDetailScreenState extends State<OutfitDetailScreen> {
                   const SizedBox(width: 4),
                   Text(
                     'Voltar',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: AppColors.wine,
-                    ),
+                    style: Theme.of(context).textTheme.titleMedium
+                        ?.copyWith(color: AppColors.wine),
                   ),
                 ],
               ),
@@ -55,12 +47,20 @@ class _OutfitDetailScreenState extends State<OutfitDetailScreen> {
                   builder: (context, constraints) {
                     final isWide = constraints.maxWidth >= 640;
                     final collage = _Collage(outfit: outfit);
-                    final info = _DetailInfo(
-                      title: widget.title ?? 'Look do dia',
-                      tags: outfit.tags,
-                      palette: palette,
-                      saved: _saved,
-                      onSave: () => setState(() => _saved = true),
+                    final info = ListenableBuilder(
+                      listenable: OutfitHistory.instance,
+                      builder: (context, _) {
+                        final history = OutfitHistory.instance;
+                        return _DetailInfo(
+                          title: title ?? 'Look do dia',
+                          tags: outfit.tags,
+                          palette: palette,
+                          saved: history.isFavorite(outfit),
+                          onSave: () => toggleOutfitFavorite(context, outfit),
+                          lastWorn: history.lastWorn(outfit),
+                          onMarkWorn: () => markOutfitWorn(context, outfit),
+                        );
+                      },
                     );
 
                     if (isWide) {
@@ -132,6 +132,8 @@ class _DetailInfo extends StatelessWidget {
     required this.palette,
     required this.saved,
     required this.onSave,
+    required this.lastWorn,
+    required this.onMarkWorn,
   });
 
   final String title;
@@ -139,9 +141,16 @@ class _DetailInfo extends StatelessWidget {
   final List<Color> palette;
   final bool saved;
   final VoidCallback onSave;
+  final DateTime? lastWorn;
+  final VoidCallback onMarkWorn;
 
   @override
   Widget build(BuildContext context) {
+    final lastWorn = this.lastWorn;
+    final wornToday =
+        lastWorn != null && DateUtils.isSameDay(lastWorn, DateTime.now());
+    final wornLabel = lastWorn == null ? null : describeLastWorn(lastWorn);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -171,11 +180,30 @@ class _DetailInfo extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 32),
-        ElevatedButton.icon(
-          onPressed: saved ? null : onSave,
-          icon: Icon(saved ? Icons.favorite : Icons.favorite_border),
-          label: Text(saved ? 'Look salvo' : 'Salvar look'),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            ElevatedButton.icon(
+              onPressed: onSave,
+              icon: Icon(saved ? Icons.favorite : Icons.favorite_border),
+              label: Text(saved ? 'Look salvo' : 'Salvar look'),
+            ),
+            OutlinedButton.icon(
+              onPressed: wornToday ? null : onMarkWorn,
+              icon: Icon(wornToday ? Icons.check : Icons.checkroom),
+              label: Text(wornToday ? 'Usado hoje' : 'Usei hoje'),
+            ),
+          ],
         ),
+        if (wornLabel != null && !wornToday) ...[
+          const SizedBox(height: 12),
+          Text(
+            wornLabel,
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: AppColors.textMuted),
+          ),
+        ],
       ],
     );
   }
@@ -196,9 +224,8 @@ class _TagChip extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: Theme.of(
-          context,
-        ).textTheme.bodyMedium?.copyWith(color: AppColors.wine),
+        style: Theme.of(context).textTheme.bodyMedium
+            ?.copyWith(color: AppColors.wine),
       ),
     );
   }

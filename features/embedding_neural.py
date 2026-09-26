@@ -1,10 +1,15 @@
 import torch
 from PIL import Image
-from features.cores import extrair_cores
+from features.cores import extrair_cores, vetor_cores
 from features.tipo import classificar_tipo
 from features.estampa import classificar_estampa
 from features.formalidade import classificar_formalidade
 from features._clip_shared import model, processor
+
+# Suba quando mudar o calculo das features: o app reanalisa as pecas salvas
+# com versao menor (RecommendationService.featuresVersion, em Dart).
+# 2: cor principal = cluster com mais pixels; mascara sem a borda suave.
+VERSAO_FEATURES = 2
 
 
 def extrair_vetor_clip(inputs):
@@ -28,16 +33,7 @@ def gerar_embedding_completo(caminho_imagem):
     estampa     = classificar_estampa(caminho_imagem)
     formalidade = classificar_formalidade(caminho_imagem)
 
-    tonalidade_map = {"claro": 0, "médio": 1, "escuro": 2}
-
-    embedding_manual = [
-        cores["cor_principal"][0]  / 255,
-        cores["cor_principal"][1]  / 255,
-        cores["cor_principal"][2]  / 255,
-        cores["cor_secundaria"][0] / 255,
-        cores["cor_secundaria"][1] / 255,
-        cores["cor_secundaria"][2] / 255,
-        cores["tonalidade"] / 3,
+    embedding_manual = vetor_cores(cores) + [
         tipo["codigo"]        / 10,
         tipo["codigo_tipo"]   / 3,
         estampa["codigo"]     / 2,
@@ -51,6 +47,12 @@ def gerar_embedding_completo(caminho_imagem):
 
     embedding_final = embedding_manual + embedding_neural  # 523 números
 
+    # Resultados intermediarios vao junto pra quem precisa deles (api/main.py)
+    # nao ter que rodar cores/CLIP de novo.
     return {
-        "embedding": embedding_final
+        "embedding": embedding_final,
+        "cores": cores,
+        "tipo": tipo,
+        "estampa": estampa,
+        "formalidade": formalidade,
         }

@@ -80,7 +80,10 @@ outfit.matcher/
 │
 ├── model/
 │   ├── preparar_dados.py    # lê dataset e cria pares de roupas
-│   └── treinar.py           # treina o modelo de match
+│   ├── treinar.py           # treina o modelo de match
+│   └── recomendar.py        # monta e ordena looks (modelo + ocasião + clima)
+│
+├── api/main.py              # API FastAPI usada pelo app
 │
 ├── app/                     # interface em Flutter (web + iOS + Android)
 │
@@ -199,6 +202,46 @@ PYTHONPATH=. python3 model/treinar.py \
 O melhor modelo sera salvo em `model/match_model.pt` e o historico em
 `model/historico_treino.csv`.
 
+### Gerar looks a partir de fotos
+
+```bash
+PYTHONPATH=. python3 main.py foto1.jpg foto2.jpg foto3.jpg --ocasiao trabalho --clima frio
+```
+
+---
+
+## 🧩 Recomendação de looks
+
+O modelo só responde "essa peça de cima combina com essa de baixo?". O
+recomendador (`model/recomendar.py`) monta os looks em cima disso:
+
+1. **Candidatos** — cima + baixo e vestido sozinho, com ou sem camada
+   (jaqueta/casaco). Cima/baixo vem da categoria que a usuária escolhe no app;
+   a categoria fina detectada (calça x short, jaqueta x camiseta) só entra nas
+   regras de clima.
+2. **Filtros** — clima frio exclui short; calor não gera camada; trabalho
+   exclui short. Se nada sobrar, os filtros viram só penalidade.
+3. **Score** — média ponderada de compatibilidade (modelo, 55%), ocasião
+   (30%) e clima (15%). A ocasião compara o vetor CLIP da foto com frases como
+   "roupa elegante de escritório", sem rodar o CLIP de novo.
+4. **Diversidade** — escolha gulosa que penaliza peças já usadas nos looks
+   anteriores.
+
+Ocasiões: `casual`, `dia_a_dia`, `trabalho`, `encontro`, `festa`.
+Climas: `calor`, `frio`, `chuva`.
+
+### API
+
+```bash
+PYTHONPATH=. .venv/bin/uvicorn api.main:app --reload
+```
+
+| Endpoint | O que faz |
+|---|---|
+| `POST /items/crop` | recorta a peça da foto (PNG transparente) |
+| `POST /items/analyze` | cor, categoria, estampa, formalidade e embedding de 523 números |
+| `POST /looks/recommend` | recebe as peças com features + ocasião/clima e devolve os looks |
+
 ---
 
 ## 📦 Dependências principais
@@ -238,8 +281,8 @@ Os dois são concatenados em um vetor de **523 dimensões** que representa cada 
 ## 📱 Interface
 
 A interface (web + iOS + Android) fica em [`app/`](app/), construída em Flutter.
-Por enquanto usa dados fake enquanto o pipeline acima não está conectado —
-veja [`app/README.md`](app/README.md) pra rodar.
+O guarda-roupa fica no Supabase; a análise das fotos e as sugestões de look
+vêm da API acima — veja [`app/README.md`](app/README.md) pra rodar.
 
 ---
 

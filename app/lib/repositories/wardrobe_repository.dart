@@ -11,10 +11,10 @@ import '../models/clothing_item.dart';
 ///
 /// Metadados de cada peça ficam na tabela `clothing_items` e a foto em si
 /// no bucket `clothing-images`, isolados por usuário via Row Level
-/// Security — ver `supabase/schema.sql`. A extração de features (cor real,
-/// categoria por CLIP etc, `features/*.py`) ainda não roda aqui: cada peça
-/// nova entra com uma cor de placeholder e `features` nulo no banco,
-/// prontos pra um pipeline futuro preencher.
+/// Security — ver `supabase/schema.sql`. As features extraídas pela API
+/// Python (`/items/analyze`) ficam na coluna jsonb `features`; peças salvas
+/// com a API fora do ar entram com `features` nulo e podem ser analisadas
+/// depois via [updateFeatures].
 class WardrobeRepository {
   WardrobeRepository({SupabaseClient? client})
     : _client = client ?? Supabase.instance.client;
@@ -46,6 +46,7 @@ class WardrobeRepository {
     required ClothingCategory category,
     required Uint8List imageBytes,
     required Color swatch,
+    Map<String, dynamic>? features,
   }) async {
     final userId = _userId;
     final id = const Uuid().v4();
@@ -70,6 +71,7 @@ class WardrobeRepository {
           'category': category.name,
           'image_path': storagePath,
           'swatch_color': swatch.toARGB32(),
+          'features': features,
         })
         .select()
         .single();
@@ -84,10 +86,27 @@ class WardrobeRepository {
         .eq('id', item.id);
   }
 
+  Future<void> updateFeatures(
+    ClothingItem item,
+    Map<String, dynamic> features, {
+    Color? swatch,
+  }) {
+    return _client
+        .from(_table)
+        .update({'features': features, 'swatch_color': ?swatch?.toARGB32()})
+        .eq('id', item.id);
+  }
+
+  /// Baixa a foto já salva de uma peça — usado pra analisar peças antigas,
+  /// cadastradas antes da análise automática existir.
+  Future<Uint8List> downloadImage(ClothingItem item) {
+    return _client.storage.from(_bucket).download(item.storagePath!);
+  }
+
   Future<void> deleteItem(ClothingItem item) async {
     await _client.from(_table).delete().eq('id', item.id);
-    if (item.imagePath != null) {
-      await _client.storage.from(_bucket).remove([item.imagePath!]);
+    if (item.storagePath != null) {
+      await _client.storage.from(_bucket).remove([item.storagePath!]);
     }
   }
 
@@ -103,7 +122,9 @@ class WardrobeRepository {
       category: ClothingCategory.values.byName(row['category'] as String),
       swatch: Color(row['swatch_color'] as int),
       imageUrl: imageUrl,
+      storagePath: imagePath,
       isFavorite: row['is_favorite'] as bool,
+      features: row['features'] as Map<String, dynamic>?,
     );
   }
 }

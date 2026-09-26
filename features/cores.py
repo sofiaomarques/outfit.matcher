@@ -9,6 +9,11 @@ from rembg import remove, new_session
 # grande que fique lento numa foto de celular de 3000+ pixels.
 _TAMANHO_MAX_SEGMENTACAO = 512
 _AREA_MINIMA_DETECCAO = 0.03  # % da imagem que a mascara precisa cobrir
+# Pixel so conta como peca se a mascara tiver pelo menos metade de certeza.
+# Com > 0, a borda suave do rembg (12-35% da mascara nas fotos de catalogo)
+# entrava inteira: o fundo branco virava a "cor secundaria" e clareava a
+# principal.
+_LIMIAR_MASCARA = 127
 
 _sessao_roupa = None
 
@@ -48,10 +53,10 @@ def _segmentar_mascara(imagem_seg):
     total_pixels = imagem_seg.size[0] * imagem_seg.size[1]
 
     if areas[melhor_indice] / total_pixels >= _AREA_MINIMA_DETECCAO:
-        return np.array(mascaras[melhor_indice].resize(imagem_seg.size)) > 0
+        return np.array(mascaras[melhor_indice].resize(imagem_seg.size)) > _LIMIAR_MASCARA
 
     imagem_sem_fundo = remove(imagem_seg)
-    return np.array(imagem_sem_fundo)[:, :, 3] > 0
+    return np.array(imagem_sem_fundo)[:, :, 3] > _LIMIAR_MASCARA
 
 
 def remover_fundo(imagem):
@@ -78,7 +83,11 @@ def extrair_cores(caminho_imagem):
     kmeans = KMeans(n_clusters=2, random_state=42, n_init=10)
     kmeans.fit(pixels)
 
-    cores = kmeans.cluster_centers_.astype(int).tolist()
+    # A ordem dos clusters do K-Means e arbitraria: a cor principal e a do
+    # cluster com mais pixels, nao a do indice 0.
+    tamanhos = np.bincount(kmeans.labels_, minlength=2)
+    ordem = np.argsort(tamanhos)[::-1]
+    cores = kmeans.cluster_centers_[ordem].astype(int).tolist()
 
     cor_principal  = cores[0]
     cor_secundaria = cores[1]
@@ -96,3 +105,19 @@ def extrair_cores(caminho_imagem):
         "cor_secundaria": cor_secundaria,
         "tonalidade":     tonalidade
     }
+
+
+def vetor_cores(cores):
+    """Indices 0-6 do embedding: cor principal e secundaria (RGB /255) e
+    tonalidade (/3). Usado por features/embedding_neural.py e por
+    model/recalcular_cores.py, que refaz so essa parte dos embeddings em
+    cache."""
+    return [
+        cores["cor_principal"][0]  / 255,
+        cores["cor_principal"][1]  / 255,
+        cores["cor_principal"][2]  / 255,
+        cores["cor_secundaria"][0] / 255,
+        cores["cor_secundaria"][1] / 255,
+        cores["cor_secundaria"][2] / 255,
+        cores["tonalidade"] / 3,
+    ]

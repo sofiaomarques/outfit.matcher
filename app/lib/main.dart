@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'screens/auth_screen.dart';
+import 'screens/favorites_screen.dart';
 import 'screens/looks_screen.dart';
 import 'screens/new_look_screen.dart';
 import 'screens/placeholder_screen.dart';
@@ -10,7 +11,6 @@ import 'screens/wishlist_screen.dart';
 import 'services/supabase_config.dart';
 import 'theme/app_theme.dart';
 import 'widgets/app_shell.dart';
-import 'widgets/painted_heart.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -84,10 +84,7 @@ class _RootNavigatorState extends State<_RootNavigator> {
     NewLookScreen(),
     LooksScreen(),
     WishlistScreen(),
-    PlaceholderScreen(
-      title: 'Favoritos',
-      icon: PaintedHeart(size: 48),
-    ),
+    FavoritesScreen(),
     PlaceholderScreen(title: 'Configurações'),
   ];
 

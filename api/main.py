@@ -13,17 +13,19 @@ from __future__ import annotations
 import io
 import tempfile
 from pathlib import Path
+from typing import Any, Literal
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
-from features.cores import extrair_cores
-from features.embedding_neural import gerar_embedding_completo
-from features.estampa import classificar_estampa
-from features.formalidade import classificar_formalidade
+from PIL import Image
+from pydantic import BaseModel, Field
+
+from features.embedding_neural import VERSAO_FEATURES, gerar_embedding_completo
 from features.recorte import recortar_peca
-from features.tipo import classificar_tipo
+from model.feedback import Feedback
+from model.recomendar import CLIMAS, OCASIOES, peca_de_features, recomendar
 
 app = FastAPI(title="Outfit Matcher API")
 
@@ -44,18 +46,38 @@ def health() -> dict:
 
 
 async def _salvar_temp(file: UploadFile) -> Path:
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Envie um arquivo de imagem.")
-
     conteudo = await file.read()
     if not conteudo:
         raise HTTPException(status_code=400, detail="Arquivo vazio.")
+
+    # Valida pelo conteudo, nao pelo content-type: o pacote `http` do Flutter
+    # manda bytes como application/octet-stream por padrao.
+    try:
+        with Image.open(io.BytesIO(conteudo)) as imagem:
+            imagem.verify()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Envie um arquivo de imagem.")
 
     sufixo = Path(file.filename or "upload.jpg").suffix or ".jpg"
     tmp = tempfile.NamedTemporaryFile(suffix=sufixo, delete=False)
     tmp.write(conteudo)
     tmp.close()
     return Path(tmp.name)
+
+
+def _achatar_em_fundo_branco(caminho: Path) -> None:
+    """Peca ja recortada (PNG transparente, saida de /items/crop) vira fundo
+    branco, como as fotos de catalogo do treino — convertida direto pra RGB,
+    o fundo transparente viraria preto pro CLIP."""
+    with Image.open(caminho) as imagem:
+        # PNG em paleta guarda a transparencia em `info`, nao numa banda A.
+        transparente = "A" in imagem.getbands() or "transparency" in imagem.info
+        if not transparente:
+            return
+        rgba = imagem.convert("RGBA")
+    fundo = Image.new("RGB", rgba.size, (255, 255, 255))
+    fundo.paste(rgba, mask=rgba.getchannel("A"))
+    fundo.save(caminho, format="PNG")
 
 
 @app.post("/items/analyze")
@@ -65,14 +87,14 @@ async def analyze_item(file: UploadFile = File(...)) -> dict:
     modelo de match (`model/match_model.pt`)."""
     caminho = await _salvar_temp(file)
     try:
-        cores = extrair_cores(str(caminho))
-        tipo = classificar_tipo(str(caminho))
-        estampa = classificar_estampa(str(caminho))
-        formalidade = classificar_formalidade(str(caminho))
-        embedding = gerar_embedding_completo(str(caminho))["embedding"]
+        _achatar_em_fundo_branco(caminho)
+        resultado = gerar_embedding_completo(str(caminho))
     finally:
         caminho.unlink(missing_ok=True)
 
+    cores, tipo = resultado["cores"], resultado["tipo"]
+    estampa, formalidade = resultado["estampa"], resultado["formalidade"]
+    embedding = resultado["embedding"]
     return {
         "cor_principal": cores["cor_principal"],
         "cor_secundaria": cores["cor_secundaria"],
@@ -83,6 +105,7 @@ async def analyze_item(file: UploadFile = File(...)) -> dict:
         "estampa": estampa["codigo"],
         "formalidade": formalidade["codigo"],
         "embedding": embedding,
+        "versao_features": VERSAO_FEATURES,
     }
 
 
@@ -100,3 +123,62 @@ async def crop_item(file: UploadFile = File(...)) -> Response:
     buffer = io.BytesIO()
     recorte.save(buffer, format="PNG")
     return Response(content=buffer.getvalue(), media_type="image/png")
+
+
+class PecaGuardaRoupa(BaseModel):
+    id: str
+    categoria: Literal["top", "bottom", "skirt", "dress", "accessory"]
+    # Saida de /items/analyze, como guardada na coluna `features`.
+    features: dict[str, Any]
+
+
+class RejeicaoEntrada(BaseModel):
+    pecas: list[str]
+    ocasiao: Literal[tuple(OCASIOES)] | None = None  # type: ignore[valid-type]
+
+
+class UsoEntrada(BaseModel):
+    pecas: list[str]
+    dias: int = Field(ge=0)  # dias desde o uso
+
+
+class FeedbackEntrada(BaseModel):
+    favoritos: list[list[str]] = []
+    rejeitados: list[RejeicaoEntrada] = []
+    usos: list[UsoEntrada] = []
+
+
+class PedidoRecomendacao(BaseModel):
+    pecas: list[PecaGuardaRoupa]
+    ocasiao: Literal[tuple(OCASIOES)] | None = None  # type: ignore[valid-type]
+    clima: Literal[tuple(CLIMAS)] | None = None  # type: ignore[valid-type]
+    top_k: int = Field(default=12, ge=1, le=50)
+    # Favoritos, rejeicoes e usos do app (tabelas outfit_*), no formato de
+    # Feedback.de_dict (model/feedback.py).
+    feedback: FeedbackEntrada | None = None
+
+
+@app.post("/looks/recommend")
+def recommend_looks(pedido: PedidoRecomendacao) -> dict:
+    """Monta e ordena looks a partir do guarda-roupa enviado pelo app
+    (model/recomendar.py). O app manda as pecas com features em vez de a API
+    ler do Supabase — assim a API nao precisa de chave de servico e o RLS
+    continua valendo. `def` (nao async): roda no threadpool do FastAPI, sem
+    travar o event loop enquanto o modelo pontua."""
+    # Peca com features quebradas fica de fora, em vez de derrubar a
+    # recomendacao do guarda-roupa inteiro.
+    pecas, ignoradas = [], []
+    for p in pedido.pecas:
+        try:
+            pecas.append(peca_de_features(p.id, p.categoria, p.features))
+        except (KeyError, TypeError, ValueError):
+            ignoradas.append(p.id)
+    feedback = Feedback.de_dict(pedido.feedback.model_dump()) if pedido.feedback else None
+    looks = recomendar(
+        pecas,
+        ocasiao=pedido.ocasiao,
+        clima=pedido.clima,
+        top_k=pedido.top_k,
+        feedback=feedback,
+    )
+    return {"looks": looks, "pecas_ignoradas": ignoradas}

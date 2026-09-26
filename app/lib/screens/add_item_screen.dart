@@ -9,9 +9,10 @@ import '../services/garment_analysis_service.dart';
 import '../theme/app_colors.dart';
 
 /// Tela de cadastro de uma peça nova: escolhe a foto (câmera ou galeria),
-/// preenche nome e categoria, e salva no guarda-roupa. A cor de placeholder
-/// e a categoria aqui são as que o usuário escolhe manualmente — o
-/// pipeline de features em Python ainda não roda sobre o upload.
+/// preenche nome e categoria, e salva no guarda-roupa. Assim que a foto é
+/// escolhida, a API Python recorta a peça e, em paralelo, extrai as
+/// features (cor real, formalidade, embedding) que o recomendador de looks
+/// usa. A categoria continua sendo a que o usuário escolhe.
 class AddItemScreen extends StatefulWidget {
   const AddItemScreen({super.key, required this.repository});
 
@@ -28,6 +29,12 @@ class _AddItemScreenState extends State<AddItemScreen> {
   Uint8List? _imageBytes;
   bool _isSaving = false;
   bool _isCropping = false;
+  bool _isAnalyzing = false;
+
+  /// Análise da foto original (não da recortada: o pipeline tem a própria
+  /// segmentação). Nulo dentro do Future se a API falhar — a peça é salva
+  /// mesmo assim, sem features.
+  Future<Map<String, dynamic>?>? _analysis;
   String? _errorText;
 
   @override
@@ -47,6 +54,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
     setState(() {
       _imageBytes = bytes;
       _isCropping = true;
+      _analysis = _analisarSemFalhar(bytes);
     });
 
     try {
@@ -57,6 +65,14 @@ class _AddItemScreenState extends State<AddItemScreen> {
       // vez de travar o cadastro da peça.
     } finally {
       if (mounted) setState(() => _isCropping = false);
+    }
+  }
+
+  Future<Map<String, dynamic>?> _analisarSemFalhar(Uint8List bytes) async {
+    try {
+      return await _analysisService.analisarPeca(bytes);
+    } catch (_) {
+      return null;
     }
   }
 
@@ -118,17 +134,27 @@ class _AddItemScreenState extends State<AddItemScreen> {
     });
 
     try {
+      setState(() => _isAnalyzing = true);
+      final features = await _analysis;
+      if (mounted) setState(() => _isAnalyzing = false);
+
       await widget.repository.addItem(
         name: _nameController.text.trim(),
         category: _category,
         imageBytes: _imageBytes!,
-        swatch: AppColors.pink,
+        swatch: swatchFromFeatures(features) ?? AppColors.pink,
+        features: features,
       );
       if (mounted) Navigator.of(context).pop(true);
     } catch (_) {
       setState(() => _errorText = 'Não foi possível salvar. Tente de novo.');
     } finally {
-      if (mounted) setState(() => _isSaving = false);
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+          _isAnalyzing = false;
+        });
+      }
     }
   }
 
@@ -221,7 +247,9 @@ class _AddItemScreenState extends State<AddItemScreen> {
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: (_isSaving || _isCropping) ? null : _save,
-              child: _isSaving
+              child: _isAnalyzing
+                  ? const Text('Analisando a peça...')
+                  : _isSaving
                   ? const SizedBox(
                       width: 20,
                       height: 20,
