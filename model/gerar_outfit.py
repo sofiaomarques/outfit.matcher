@@ -4,7 +4,6 @@ from pathlib import Path
 
 from features.embedding_neural import gerar_embedding_completo
 from model.recomendar import Peca, peca_de_features, recomendar
-from model.treinar import DEFAULT_OUTPUT
 
 # Categoria detectada (features/categoria.py) -> categoria do app. No app
 # quem define e a usuaria; aqui, rodando direto sobre fotos, vem do CLIP.
@@ -24,7 +23,7 @@ def carregar_peca(caminho_imagem: str) -> Peca:
 
 def gerar_looks(
     caminhos_pecas: list[str],
-    checkpoint_path: Path = DEFAULT_OUTPUT,
+    checkpoint_path: Path | None = None,
     top_k: int = 3,
     ocasiao: str | None = None,
     clima: str | None = None,

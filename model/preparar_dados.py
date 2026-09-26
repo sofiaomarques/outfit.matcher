@@ -222,7 +222,7 @@ def saturation(rgb: np.ndarray) -> float:
     return 0.0 if high <= 1e-6 else (high - low) / high
 
 
-def weak_compatibility(a: PreparedItem, b: PreparedItem) -> bool:
+def weak_compatibility(a: PreparedItem, b: PreparedItem, checar_formalidade: bool = True) -> bool:
     fa = a.embedding[:11]
     fb = b.embedding[:11]
     color_distance = float(np.linalg.norm(fa[:3] - fb[:3]))
@@ -231,7 +231,8 @@ def weak_compatibility(a: PreparedItem, b: PreparedItem) -> bool:
     formality_diff = abs(float(fa[10] - fb[10]))
     neutral = saturation(fa[:3]) < 0.18 or saturation(fb[:3]) < 0.18
     color_ok = neutral or 0.12 <= color_distance <= 0.82
-    return color_ok and tone_diff <= 0.60 and print_sum <= 1.35 and formality_diff <= 0.38
+    formality_ok = not checar_formalidade or formality_diff <= 0.38
+    return color_ok and tone_diff <= 0.60 and print_sum <= 1.35 and formality_ok
 
 
 def generate_pairs(

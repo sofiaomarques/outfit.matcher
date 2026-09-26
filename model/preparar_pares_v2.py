@@ -5,7 +5,8 @@ Diferencas em relacao ao preparar_dados.py:
   e nao do CLIP; o modelo so precisa aprender se duas pecas combinam;
 - so roupas Women/Unisex ocidentais, ate N pecas por articleType;
 - todo par e peca de cima + peca de baixo (short e saia contam como baixo);
-- positivo = regra de cor/tom/estampa/formalidade + ocasiao (usage) compativel;
+- positivo = regra de cor/tom/estampa + ocasiao (usage) compativel + sem
+  contraste esportivo x elegante (medido pelo CLIP, ver contraste_de_estilo);
 - as pecas sao separadas em treino/validacao antes de montar os pares, para a
   validacao medir pares com pecas que o modelo nunca viu.
 """
@@ -28,12 +29,20 @@ from model.preparar_dados import (
     save_cache,
     weak_compatibility,
 )
+from model.recomendar import probabilidades_contextos
 
 DEFAULT_DATASET_DIR = Path("dados/fashion-dataset-roupas")
 DEFAULT_OUTPUT = Path("dados/pares_outfits_v2.npz")
 DEFAULT_CACHE = Path("dados/embeddings_v2.npz")
 DEFAULT_CACHE_V1 = Path("dados/embeddings_resumidos.npz")
 DEFAULT_STYLES_OUTPUT = Path("dados/styles_v2.csv")
+
+# Substitui a checagem do codigo de formalidade (features/formalidade.py) na
+# regra: ele quase sempre sai 0 e o 3 cai em tunica e calca de moletom, o que
+# reprovava combinacoes classicas (tunica + legging, camisa + jeans). Conflito
+# agora e uma peca esportiva com uma elegante, pelas probabilidades dos
+# contextos do recomendador (blazer ~0.90 elegante, moletom ~0.64 esportivo).
+LIMIAR_CONTRASTE = 0.4
 
 # articleType -> categoria do app (app/lib/models/clothing_category.dart).
 # Short fica em "bottom" (Calcas). Roupa etnica, pijama, vestido e acessorios ficam de fora.
@@ -147,18 +156,42 @@ def usage_compativel(a: str, b: str) -> bool:
     return b in USAGE_COMPATIVEL.get(a, {a, "Casual"})
 
 
-def combina(top: pd.Series, baixo: pd.Series, emb_top: np.ndarray, emb_baixo: np.ndarray) -> bool:
+def estilo_clip(embeddings: dict[str, np.ndarray]) -> dict[str, tuple[float, float]]:
+    """(elegante, esportivo) de cada peca: P(trabalho) + P(festa) e P(esporte)."""
+    ids = list(embeddings)
+    probs = probabilidades_contextos(np.stack([embeddings[i] for i in ids]))
+    elegante = probs["trabalho"] + probs["festa"]
+    return {i: (float(elegante[n]), float(probs["esporte"][n])) for n, i in enumerate(ids)}
+
+
+def contraste_de_estilo(estilo_a: tuple[float, float], estilo_b: tuple[float, float]) -> bool:
+    (elegante_a, esportivo_a), (elegante_b, esportivo_b) = estilo_a, estilo_b
+    return (esportivo_a >= LIMIAR_CONTRASTE and elegante_b >= LIMIAR_CONTRASTE) or (
+        esportivo_b >= LIMIAR_CONTRASTE and elegante_a >= LIMIAR_CONTRASTE
+    )
+
+
+def combina(
+    top: pd.Series,
+    baixo: pd.Series,
+    embeddings: dict[str, np.ndarray],
+    estilos: dict[str, tuple[float, float]],
+) -> bool:
+    id_top, id_baixo = str(top["id"]), str(baixo["id"])
     if not usage_compativel(top["usage"], baixo["usage"]):
         return False
-    a = PreparedItem(str(top["id"]), "", top["articleType"], 3, emb_top)
-    b = PreparedItem(str(baixo["id"]), "", baixo["articleType"], 1, emb_baixo)
-    return weak_compatibility(a, b)
+    if contraste_de_estilo(estilos[id_top], estilos[id_baixo]):
+        return False
+    a = PreparedItem(id_top, "", top["articleType"], 3, embeddings[id_top])
+    b = PreparedItem(id_baixo, "", baixo["articleType"], 1, embeddings[id_baixo])
+    return weak_compatibility(a, b, checar_formalidade=False)
 
 
 def generate_pairs(
     tops: pd.DataFrame,
     baixos: pd.DataFrame,
     embeddings: dict[str, np.ndarray],
+    estilos: dict[str, tuple[float, float]],
     n_pairs: int,
     positive_ratio: float,
     rng: random.Random,
@@ -178,7 +211,7 @@ def generate_pairs(
         if key in seen:
             continue
         seen.add(key)
-        if combina(top, baixo, embeddings[key[0]], embeddings[key[1]]):
+        if combina(top, baixo, embeddings, estilos):
             if len(positives) < target_pos:
                 positives.append((*key, 1))
         elif len(negatives) < target_neg:
@@ -204,6 +237,7 @@ def main() -> None:
     embedding_fn = resolve_embedding_function(args.embedding_function)
     embeddings = build_embeddings(styles, embedding_fn, args.cache, args.cache_v1)
     styles = styles[styles["id"].astype(str).isin(embeddings)].copy()
+    estilos = estilo_clip(embeddings)
 
     # Separa pecas (nao pares) entre treino e validacao, estratificado por articleType.
     val_ids: set[int] = set()
@@ -220,7 +254,7 @@ def main() -> None:
         parte = styles[styles["split"] == split]
         tops = parte[parte["categoria"].isin(CIMA)]
         baixos = parte[parte["categoria"].isin(BAIXO)]
-        pairs = generate_pairs(tops, baixos, embeddings, n_pairs, args.positive_ratio, rng)
+        pairs = generate_pairs(tops, baixos, embeddings, estilos, n_pairs, args.positive_ratio, rng)
         print(f"[v2] {split}: {len(tops)} tops x {len(baixos)} baixos -> {len(pairs)} pares")
         all_pairs.extend(pairs)
         splits.extend([split] * len(pairs))
@@ -233,6 +267,7 @@ def main() -> None:
         "generos": sorted(GENEROS),
         "positive_ratio": args.positive_ratio,
         "val_items": args.val_items,
+        "limiar_contraste": LIMIAR_CONTRASTE,
         "seed": args.seed,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
