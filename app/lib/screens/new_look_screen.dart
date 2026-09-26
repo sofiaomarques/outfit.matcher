@@ -99,11 +99,13 @@ class _NewLookScreenState extends State<NewLookScreen> {
         _looks = looks;
         _isLoading = false;
       });
-    } catch (_) {
+    } catch (error) {
       if (!mounted || requestId != _requestId) return;
       setState(() {
-        _errorText =
-            'Não foi possível gerar o look. Confira se a API está rodando.';
+        _errorText = error is NoAnalyzedItemsException
+            ? 'Não foi possível analisar suas peças. '
+                  'Confira se a API está rodando.'
+            : 'Não foi possível gerar o look. Confira se a API está rodando.';
         _isLoading = false;
       });
     }
@@ -117,6 +119,72 @@ class _NewLookScreenState extends State<NewLookScreen> {
   void _nextLook() {
     setState(() {
       _lookIndex = (_lookIndex + 1) % _looks.length;
+    });
+  }
+
+  /// "Não curti": tira o look da lista na hora e salva a rejeição pra essa
+  /// ocasião (o recomendador não sugere mais esse look nela, e penaliza os
+  /// mesmos pares de peças). Sem sugestões sobrando, pede novas.
+  Future<void> _rejectCurrent() async {
+    final outfit = _looks[_lookIndex];
+    final occasionLabel = _selectedOccasion!;
+    final occasion = occasionKeys[occasionLabel];
+    final messenger = ScaffoldMessenger.of(context);
+    _removeLook(outfit);
+
+    final saved = await OutfitHistory.instance.reject(
+      outfit,
+      occasion: occasion,
+    );
+    if (!mounted) return;
+    if (!saved) {
+      _restoreLook(outfit, occasionLabel);
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível salvar. Tente de novo.'),
+        ),
+      );
+      return;
+    }
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          'Não vamos mais sugerir esse look pra ${occasionLabel.toLowerCase()}.',
+        ),
+        action: SnackBarAction(
+          label: 'Desfazer',
+          onPressed: () async {
+            if (await OutfitHistory.instance.undoReject(
+                  outfit,
+                  occasion: occasion,
+                ) &&
+                mounted) {
+              _restoreLook(outfit, occasionLabel);
+            }
+          },
+        ),
+      ),
+    );
+    if (_looks.isEmpty && !_isLoading) _recommend();
+  }
+
+  void _removeLook(Outfit outfit) {
+    setState(() {
+      _looks = [
+        for (final look in _looks)
+          if (look.key != outfit.key) look,
+      ];
+      if (_lookIndex >= _looks.length) _lookIndex = 0;
+    });
+  }
+
+  /// Devolve o look pra lista (desfazer / erro ao salvar), se a ocasião
+  /// ainda é a mesma e ele não voltou numa recomendação nova.
+  void _restoreLook(Outfit outfit, String occasionLabel) {
+    if (_selectedOccasion != occasionLabel || _isLoading) return;
+    if (_looks.any((look) => look.key == outfit.key)) return;
+    setState(() {
+      _looks = [..._looks]..insert(_lookIndex, outfit);
     });
   }
 
@@ -170,12 +238,23 @@ class _NewLookScreenState extends State<NewLookScreen> {
             ),
           ),
         ),
-        if (_looks.length > 1)
-          TextButton.icon(
-            onPressed: _nextLook,
-            icon: const Icon(Icons.refresh),
-            label: Text('Ver outra (${_lookIndex + 1}/${_looks.length})'),
-          ),
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 8,
+          children: [
+            TextButton.icon(
+              onPressed: _rejectCurrent,
+              icon: const Icon(Icons.thumb_down_outlined),
+              label: const Text('Não curti'),
+            ),
+            if (_looks.length > 1)
+              TextButton.icon(
+                onPressed: _nextLook,
+                icon: const Icon(Icons.refresh),
+                label: Text('Ver outra (${_lookIndex + 1}/${_looks.length})'),
+              ),
+          ],
+        ),
       ],
     );
   }

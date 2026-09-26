@@ -1,7 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Favoritos e histórico de uso dos looks do usuário logado, nas tabelas
-/// `outfit_favorites` e `outfit_wears` (isoladas por usuário via Row Level
+/// Favoritos, rejeições e histórico de uso dos looks do usuário logado, nas
+/// tabelas `outfit_favorites`, `outfit_rejections` e `outfit_wears` (isoladas por usuário via Row Level
 /// Security — ver `supabase/schema.sql`). Um look é a lista dos ids das
 /// peças em ordem crescente (`Outfit.itemIds`).
 class OutfitHistoryRepository {
@@ -11,6 +11,7 @@ class OutfitHistoryRepository {
   final SupabaseClient _client;
   static const _favorites = 'outfit_favorites';
   static const _wears = 'outfit_wears';
+  static const _rejections = 'outfit_rejections';
 
   String get _userId {
     final user = _client.auth.currentUser;
@@ -46,6 +47,37 @@ class OutfitHistoryRepository {
         .delete()
         .contains('item_ids', itemIds)
         .containedBy('item_ids', itemIds);
+  }
+
+  /// Looks rejeitados, como (ids das peças, chave da ocasião em que foi
+  /// rejeitado — nula = geral).
+  Future<List<(List<String>, String?)>> fetchRejections() async {
+    final rows = await _client.from(_rejections).select('item_ids, ocasiao');
+    return [
+      for (final row in rows)
+        ((row['item_ids'] as List).cast<String>(), row['ocasiao'] as String?),
+    ];
+  }
+
+  Future<void> addRejection(List<String> itemIds, String? occasion) {
+    return _client
+        .from(_rejections)
+        .upsert(
+          {'user_id': _userId, 'item_ids': itemIds, 'ocasiao': occasion},
+          onConflict: 'user_id,item_ids,ocasiao',
+          ignoreDuplicates: true,
+        );
+  }
+
+  Future<void> removeRejection(List<String> itemIds, String? occasion) {
+    final query = _client
+        .from(_rejections)
+        .delete()
+        .contains('item_ids', itemIds)
+        .containedBy('item_ids', itemIds);
+    return occasion == null
+        ? query.isFilter('ocasiao', null)
+        : query.eq('ocasiao', occasion);
   }
 
   /// Usos desde [since], do mais recente pro mais antigo, como

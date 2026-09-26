@@ -14,7 +14,10 @@ com essa de baixo?". O resto e responsabilidade daqui:
 3. score = media ponderada de compatibilidade (modelo), ocasiao (CLIP:
    similaridade entre a foto de cada peca e frases como "roupa de
    escritorio") e clima (ajuste por categoria);
-4. diversidade: escolha gulosa que penaliza pecas ja usadas nos looks
+4. feedback (model/feedback.py): look rejeitado na ocasiao some, pares de
+   pecas favoritados/rejeitados somam/tiram pontos e look usado ha poucos
+   dias perde pontos;
+5. diversidade: escolha gulosa que penaliza pecas ja usadas nos looks
    anteriores, pra nao sugerir a mesma calca em todos.
 
 Tipo (cima/baixo/unica) vem da categoria escolhida pela usuaria no app;
@@ -34,6 +37,7 @@ from typing import Any
 import numpy as np
 import torch
 
+from model.feedback import AjusteFeedback, Feedback
 from model.preparar_dados import PreparedItem, weak_compatibility
 from model.treinar import DEFAULT_OUTPUT, choose_device, load_model, select_features
 
@@ -140,6 +144,7 @@ class Look:
     compatibilidade: float
     ocasiao: float = 1.0
     clima: float = 1.0
+    feedback: float = 0.0  # ja somado ao score
     score: float = 0.0
 
     def como_dict(self) -> dict[str, Any]:
@@ -150,6 +155,7 @@ class Look:
                 "compatibilidade": round(self.compatibilidade, 4),
                 "ocasiao": round(self.ocasiao, 4),
                 "clima": round(self.clima, 4),
+                "feedback": round(self.feedback, 4),
             },
         }
 
@@ -337,9 +343,11 @@ def recomendar(
     clima: str | None = None,
     top_k: int = 12,
     checkpoint_path: Path | None = None,
+    feedback: Feedback | None = None,
 ) -> list[dict[str, Any]]:
     """Devolve ate `top_k` looks como {"pecas": [ids], "score", "detalhes"},
     na ordem em que devem ser mostrados."""
+    ajuste_feedback = AjusteFeedback(feedback, ocasiao) if feedback else None
     regra_ocasiao = OCASIOES[ocasiao] if ocasiao else None
     regra_clima = CLIMAS[clima] if clima else None
 
@@ -348,6 +356,12 @@ def recomendar(
     # Guarda-roupa pequeno pode nao ter nada que passe nos filtros duros:
     # melhor sugerir o menos ruim (com penalidade) do que nada.
     candidatos = permitidos or candidatos
+    if ajuste_feedback:
+        # Rejeicao e explicita: diferente dos filtros duros, nao relaxa se
+        # nao sobrar nada.
+        candidatos = [
+            look for look in candidatos if not ajuste_feedback.rejeitado(frozenset(p.id for p in look))
+        ]
     if not candidatos:
         return []
 
@@ -367,6 +381,9 @@ def recomendar(
         if regra_clima:
             look.clima = _ajuste_clima(look_pecas, regra_clima)
         look.score = sum(getattr(look, nome) * peso for nome, peso in pesos.items()) / total
+        if ajuste_feedback:
+            look.feedback = ajuste_feedback.ajuste(frozenset(p.id for p in look_pecas))
+            look.score += look.feedback
         looks.append(look)
 
     return [look.como_dict() for look in _escolher_com_diversidade(looks, top_k)]

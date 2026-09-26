@@ -11,13 +11,22 @@ import 'package:outfit_matcher/services/outfit_history.dart';
 class _FakeRepository implements OutfitHistoryRepository {
   List<List<String>> favorites = [];
   List<(List<String>, DateTime)> wears = [];
+  List<(List<String>, String?)> rejections = [];
   bool fail = false;
+  bool failFetchRejections = false;
+  // Falha só pra esses looks (ids juntados com '+').
+  final failFor = <String>{};
   final added = <List<String>>[];
   final removed = <List<String>>[];
   final worn = <(List<String>, DateTime)>[];
+  final rejected = <(List<String>, String?)>[];
+  final unrejected = <(List<String>, String?)>[];
 
-  void _maybeFail() {
+  void _maybeFail([List<String>? itemIds]) {
     if (fail) throw Exception('offline');
+    if (itemIds != null && failFor.contains(itemIds.join('+'))) {
+      throw Exception('recusado');
+    }
   }
 
   @override
@@ -29,8 +38,28 @@ class _FakeRepository implements OutfitHistoryRepository {
   }) async => wears;
 
   @override
+  Future<List<(List<String>, String?)>> fetchRejections() async {
+    if (failFetchRejections) throw Exception('tabela não existe');
+    return rejections;
+  }
+
+  @override
+  Future<void> addRejection(List<String> itemIds, String? occasion) async {
+    _maybeFail(itemIds);
+    rejected.add((itemIds, occasion));
+  }
+
+  @override
+  Future<void> removeRejection(List<String> itemIds, String? occasion) async {
+    _maybeFail(itemIds);
+    unrejected.add((itemIds, occasion));
+  }
+
+  @override
   Future<void> addFavorite(List<String> itemIds) async {
-    _maybeFail();
+    // Deixa outros toques acontecerem antes de responder, como na rede.
+    await Future<void>.delayed(Duration.zero);
+    _maybeFail(itemIds);
     added.add(itemIds);
   }
 
@@ -128,6 +157,88 @@ void main() {
     repo.fail = true;
     expect(await history.markWorn(look, now: DateTime(2026, 9, 27)), isFalse);
     expect(history.lastWorn(look), DateTime(2026, 9, 26));
+  });
+
+  test(
+    'falha de um favorito não desfaz outro favoritado ao mesmo tempo',
+    () async {
+      final repo = _FakeRepository()..failFor.add('b-blusa+c-saia');
+      final history = OutfitHistory(repository: repo);
+      final recusado = _outfit([blusa, saia]);
+      final aceito = _outfit([blusa, calca]);
+
+      final results = await Future.wait([
+        history.toggleFavorite(recusado),
+        history.toggleFavorite(aceito),
+      ]);
+
+      expect(results, [isFalse, isTrue]);
+      expect(history.isFavorite(recusado), isFalse);
+      expect(history.isFavorite(aceito), isTrue);
+    },
+  );
+
+  test(
+    'rejeição vale só na ocasião em que foi dada, e dá pra desfazer',
+    () async {
+      final repo = _FakeRepository();
+      final history = OutfitHistory(repository: repo);
+      final look = _outfit([blusa, calca]);
+
+      expect(await history.reject(look, occasion: 'trabalho'), isTrue);
+      expect(history.isRejected(look, occasion: 'trabalho'), isTrue);
+      expect(history.isRejected(look, occasion: 'casual'), isFalse);
+      expect(repo.rejected.single.$1, ['a-calca', 'b-blusa']);
+      expect(repo.rejected.single.$2, 'trabalho');
+
+      expect(await history.undoReject(look, occasion: 'trabalho'), isTrue);
+      expect(history.isRejected(look, occasion: 'trabalho'), isFalse);
+      expect(repo.unrejected.single.$2, 'trabalho');
+    },
+  );
+
+  test('se o Supabase recusa, a rejeição é desfeita', () async {
+    final repo = _FakeRepository()..fail = true;
+    final history = OutfitHistory(repository: repo);
+    final look = _outfit([blusa, calca]);
+
+    expect(await history.reject(look, occasion: 'festa'), isFalse);
+    expect(history.isRejected(look, occasion: 'festa'), isFalse);
+  });
+
+  test('carrega rejeições e usos pro recomendador', () async {
+    final repo = _FakeRepository()
+      ..rejections = [
+        (['a-calca', 'b-blusa'], 'trabalho'),
+      ]
+      ..wears = [
+        (['a-calca', 'b-blusa'], DateTime(2026, 9, 24)),
+      ];
+    final history = OutfitHistory(repository: repo);
+
+    await history.load(now: DateTime(2026, 9, 26));
+
+    expect(
+      history.isRejected(_outfit([calca, blusa]), occasion: 'trabalho'),
+      isTrue,
+    );
+    final (ids, day) = history.wornLooks.single;
+    expect(ids, ['a-calca', 'b-blusa']);
+    expect(day, DateTime(2026, 9, 24));
+  });
+
+  test('sem a tabela de rejeições, favoritos continuam carregando', () async {
+    final repo = _FakeRepository()
+      ..failFetchRejections = true
+      ..favorites = [
+        ['a-calca', 'b-blusa'],
+      ];
+    final history = OutfitHistory(repository: repo);
+
+    await history.load(now: DateTime(2026, 9, 26));
+
+    expect(history.isFavorite(_outfit([blusa, calca])), isTrue);
+    expect(history.rejections, isEmpty);
   });
 
   test('descreve há quanto tempo o look foi usado', () {

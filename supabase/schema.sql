@@ -164,8 +164,22 @@ create table if not exists public.outfit_wears (
 create index if not exists outfit_wears_user_worn_on_idx
   on public.outfit_wears (user_id, worn_on desc);
 
+-- Looks que a usuária rejeitou ("Não curti" em Novo look). `ocasiao` é a
+-- chave da ocasião em que foi rejeitado (ex.: 'trabalho', ver OCASIOES em
+-- model/recomendar.py): a rejeição só vale nela — "não é pra trabalho" não
+-- é "não gosto". Nula = rejeição geral.
+create table if not exists public.outfit_rejections (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  item_ids uuid[] not null check (cardinality(item_ids) between 1 and 4),
+  ocasiao text,
+  created_at timestamptz not null default now(),
+  unique nulls not distinct (user_id, item_ids, ocasiao)
+);
+
 alter table public.outfit_favorites enable row level security;
 alter table public.outfit_wears enable row level security;
+alter table public.outfit_rejections enable row level security;
 
 create policy "outfit_favorites_select_own"
   on public.outfit_favorites for select
@@ -189,4 +203,16 @@ create policy "outfit_wears_insert_own"
 
 create policy "outfit_wears_delete_own"
   on public.outfit_wears for delete
+  using (auth.uid() = user_id);
+
+create policy "outfit_rejections_select_own"
+  on public.outfit_rejections for select
+  using (auth.uid() = user_id);
+
+create policy "outfit_rejections_insert_own"
+  on public.outfit_rejections for insert
+  with check (auth.uid() = user_id);
+
+create policy "outfit_rejections_delete_own"
+  on public.outfit_rejections for delete
   using (auth.uid() = user_id);

@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 
 from features.embedding_neural import VERSAO_FEATURES, gerar_embedding_completo
 from features.recorte import recortar_peca
+from model.feedback import Feedback
 from model.recomendar import CLIMAS, OCASIOES, peca_de_features, recomendar
 
 app = FastAPI(title="Outfit Matcher API")
@@ -69,7 +70,9 @@ def _achatar_em_fundo_branco(caminho: Path) -> None:
     branco, como as fotos de catalogo do treino — convertida direto pra RGB,
     o fundo transparente viraria preto pro CLIP."""
     with Image.open(caminho) as imagem:
-        if "A" not in imagem.getbands():
+        # PNG em paleta guarda a transparencia em `info`, nao numa banda A.
+        transparente = "A" in imagem.getbands() or "transparency" in imagem.info
+        if not transparente:
             return
         rgba = imagem.convert("RGBA")
     fundo = Image.new("RGB", rgba.size, (255, 255, 255))
@@ -129,11 +132,30 @@ class PecaGuardaRoupa(BaseModel):
     features: dict[str, Any]
 
 
+class RejeicaoEntrada(BaseModel):
+    pecas: list[str]
+    ocasiao: Literal[tuple(OCASIOES)] | None = None  # type: ignore[valid-type]
+
+
+class UsoEntrada(BaseModel):
+    pecas: list[str]
+    dias: int = Field(ge=0)  # dias desde o uso
+
+
+class FeedbackEntrada(BaseModel):
+    favoritos: list[list[str]] = []
+    rejeitados: list[RejeicaoEntrada] = []
+    usos: list[UsoEntrada] = []
+
+
 class PedidoRecomendacao(BaseModel):
     pecas: list[PecaGuardaRoupa]
     ocasiao: Literal[tuple(OCASIOES)] | None = None  # type: ignore[valid-type]
     clima: Literal[tuple(CLIMAS)] | None = None  # type: ignore[valid-type]
     top_k: int = Field(default=12, ge=1, le=50)
+    # Favoritos, rejeicoes e usos do app (tabelas outfit_*), no formato de
+    # Feedback.de_dict (model/feedback.py).
+    feedback: FeedbackEntrada | None = None
 
 
 @app.post("/looks/recommend")
@@ -143,9 +165,20 @@ def recommend_looks(pedido: PedidoRecomendacao) -> dict:
     ler do Supabase — assim a API nao precisa de chave de servico e o RLS
     continua valendo. `def` (nao async): roda no threadpool do FastAPI, sem
     travar o event loop enquanto o modelo pontua."""
-    try:
-        pecas = [peca_de_features(p.id, p.categoria, p.features) for p in pedido.pecas]
-    except (KeyError, ValueError) as exc:
-        raise HTTPException(status_code=422, detail=f"Features invalidas: {exc}")
-    looks = recomendar(pecas, ocasiao=pedido.ocasiao, clima=pedido.clima, top_k=pedido.top_k)
-    return {"looks": looks}
+    # Peca com features quebradas fica de fora, em vez de derrubar a
+    # recomendacao do guarda-roupa inteiro.
+    pecas, ignoradas = [], []
+    for p in pedido.pecas:
+        try:
+            pecas.append(peca_de_features(p.id, p.categoria, p.features))
+        except (KeyError, TypeError, ValueError):
+            ignoradas.append(p.id)
+    feedback = Feedback.de_dict(pedido.feedback.model_dump()) if pedido.feedback else None
+    looks = recomendar(
+        pecas,
+        ocasiao=pedido.ocasiao,
+        clima=pedido.clima,
+        top_k=pedido.top_k,
+        feedback=feedback,
+    )
+    return {"looks": looks, "pecas_ignoradas": ignoradas}

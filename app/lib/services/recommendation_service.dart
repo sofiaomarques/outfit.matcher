@@ -7,6 +7,7 @@ import '../models/outfit.dart';
 import '../repositories/wardrobe_repository.dart';
 import 'api_config.dart';
 import 'garment_analysis_service.dart';
+import 'outfit_history.dart';
 
 /// Ocasiões de "Novo look" -> chave aceita por `/looks/recommend`
 /// (`OCASIOES` em `model/recomendar.py`).
@@ -28,15 +29,25 @@ const Map<String, String> weatherKeys = {
 
 /// Monta looks com as peças reais do guarda-roupa, chamando o recomendador
 /// da API Python (`model/recomendar.py`): compatibilidade entre as peças
-/// (modelo treinado) + ocasião + clima, com variedade entre os looks.
+/// (modelo treinado) + ocasião + clima + feedback da usuária (favoritos,
+/// rejeições e usos do [OutfitHistory]), com variedade entre os looks.
 class RecommendationService {
   RecommendationService(
     this._repository, {
     GarmentAnalysisService? analysisService,
-  }) : _analysisService = analysisService ?? GarmentAnalysisService();
+    OutfitHistory? history,
+  }) : _analysisService = analysisService ?? GarmentAnalysisService(),
+       _history = history ?? OutfitHistory.instance;
 
   final WardrobeRepository _repository;
   final GarmentAnalysisService _analysisService;
+  final OutfitHistory _history;
+
+  // "Novo look" e "Seus looks" nascem juntas (IndexedStack) e as duas
+  // carregam o guarda-roupa: compartilham a mesma análise em andamento em
+  // vez de analisar as mesmas peças duas vezes.
+  static Future<List<ClothingItem>>? _pendingLoad;
+  static final _progressListeners = <void Function(int done, int total)>{};
 
   /// Mesmo valor de `VERSAO_FEATURES` em `features/embedding_neural.py`.
   /// Peças analisadas com versão anterior são reanalisadas.
@@ -55,6 +66,23 @@ class RecommendationService {
   Future<List<ClothingItem>> loadWardrobe({
     void Function(int done, int total)? onProgress,
   }) async {
+    if (onProgress != null) _progressListeners.add(onProgress);
+    try {
+      return await (_pendingLoad ??= _loadWardrobe().whenComplete(
+        () => _pendingLoad = null,
+      ));
+    } finally {
+      _progressListeners.remove(onProgress);
+    }
+  }
+
+  void _notifyProgress(int done, int total) {
+    for (final listener in _progressListeners.toList()) {
+      listener(done, total);
+    }
+  }
+
+  Future<List<ClothingItem>> _loadWardrobe() async {
     final items = await _repository.fetchItems();
     final missing = items
         .where((item) => _needsAnalysis(item) && item.storagePath != null)
@@ -63,7 +91,7 @@ class RecommendationService {
 
     final analyzed = <String, ClothingItem>{};
     for (final (index, item) in missing.indexed) {
-      onProgress?.call(index, missing.length);
+      _notifyProgress(index, missing.length);
       try {
         final bytes = await _repository.downloadImage(item);
         final features = await _analysisService.analisarPeca(bytes);
@@ -74,12 +102,13 @@ class RecommendationService {
         // Segue sem essa peça; tenta de novo na próxima vez que a tela abrir.
       }
     }
-    onProgress?.call(missing.length, missing.length);
+    _notifyProgress(missing.length, missing.length);
     return [for (final item in items) analyzed[item.id] ?? item];
   }
 
   /// Pede os [topK] melhores looks. [occasion] e [weather] são os rótulos
-  /// da interface (ex.: 'Trabalho', 'Frio'); nulos = sem filtro.
+  /// da interface (ex.: 'Trabalho', 'Frio'); nulos = sem filtro. Lança
+  /// [NoAnalyzedItemsException] se há peças mas nenhuma foi analisada.
   Future<List<Outfit>> recommend(
     List<ClothingItem> items, {
     String? occasion,
@@ -87,7 +116,10 @@ class RecommendationService {
     int topK = 12,
   }) async {
     final analyzed = items.where((item) => item.features != null).toList();
-    if (analyzed.isEmpty) return [];
+    if (analyzed.isEmpty) {
+      if (items.isNotEmpty) throw const NoAnalyzedItemsException();
+      return [];
+    }
 
     final response = await http
         .post(
@@ -105,6 +137,7 @@ class RecommendationService {
             'ocasiao': occasionKeys[occasion],
             'clima': weatherKeys[weather],
             'top_k': topK,
+            'feedback': await _feedbackPayload(),
           }),
         )
         .timeout(const Duration(seconds: 30));
@@ -126,4 +159,35 @@ class RecommendationService {
         ),
     ];
   }
+
+  /// Favoritos, rejeições e usos no formato de `Feedback.de_dict`
+  /// (`model/feedback.py`). Sem histórico (Supabase fora, tabelas ainda
+  /// não criadas), recomenda sem feedback em vez de falhar.
+  Future<Map<String, dynamic>?> _feedbackPayload() async {
+    try {
+      await _history.ensureLoaded();
+    } catch (_) {
+      return null;
+    }
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return {
+      'favoritos': _history.favorites,
+      'rejeitados': [
+        for (final (ids, occasion) in _history.rejections)
+          {'pecas': ids, 'ocasiao': occasion},
+      ],
+      'usos': [
+        for (final (ids, day) in _history.wornLooks)
+          // Arredonda as horas: com horário de verão um dia tem 23 ou 25h.
+          {'pecas': ids, 'dias': (today.difference(day).inHours / 24).round()},
+      ],
+    };
+  }
+}
+
+/// Existem peças no guarda-roupa, mas nenhuma pôde ser analisada (API de
+/// análise fora do ar): diferente de um guarda-roupa vazio.
+class NoAnalyzedItemsException implements Exception {
+  const NoAnalyzedItemsException();
 }

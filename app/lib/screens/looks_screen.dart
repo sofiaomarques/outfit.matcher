@@ -109,11 +109,13 @@ class _LooksScreenState extends State<LooksScreen> {
         _page = 0;
       });
       if (_pageController.hasClients) _pageController.jumpToPage(0);
-    } catch (_) {
+    } catch (error) {
       if (!mounted || requestId != _requestId) return;
       setState(() {
-        _errorText =
-            'Não foi possível gerar os looks. Confira se a API está rodando.';
+        _errorText = error is NoAnalyzedItemsException
+            ? 'Não foi possível analisar suas peças. '
+                  'Confira se a API está rodando.'
+            : 'Não foi possível gerar os looks. Confira se a API está rodando.';
         _isLoading = false;
       });
     }
