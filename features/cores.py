@@ -105,3 +105,19 @@ def extrair_cores(caminho_imagem):
         "cor_secundaria": cor_secundaria,
         "tonalidade":     tonalidade
     }
+
+
+def vetor_cores(cores):
+    """Indices 0-6 do embedding: cor principal e secundaria (RGB /255) e
+    tonalidade (/3). Usado por features/embedding_neural.py e por
+    model/recalcular_cores.py, que refaz so essa parte dos embeddings em
+    cache."""
+    return [
+        cores["cor_principal"][0]  / 255,
+        cores["cor_principal"][1]  / 255,
+        cores["cor_principal"][2]  / 255,
+        cores["cor_secundaria"][0] / 255,
+        cores["cor_secundaria"][1] / 255,
+        cores["cor_secundaria"][2] / 255,
+        cores["tonalidade"] / 3,
+    ]

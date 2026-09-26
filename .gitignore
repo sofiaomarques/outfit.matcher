@@ -17,3 +17,6 @@ dados/embeddings_v2.npz
 dados/pares_outfits_v2.npz
 dados/styles_v2.csv
 model/historico_treino_*.csv
+
+dados/cores_recalculadas.npz
+dados/*.antes_cores.npz
