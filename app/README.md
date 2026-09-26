@@ -16,7 +16,7 @@ O app precisa de um projeto Supabase (banco Postgres + storage de arquivos
 2. No SQL Editor do projeto, rode o conteúdo de
    [`../supabase/schema.sql`](../supabase/schema.sql) — isso cria as
    tabelas (`clothing_items`, `wishlist_items`, `outfit_favorites`,
-   `outfit_wears`), as políticas de Row Level Security e os buckets
+   `outfit_wears`, `outfit_rejections`), as políticas de Row Level Security e os buckets
    privados de fotos. Se o projeto já tinha rodado uma versão anterior do
    script, rode só a parte nova (os `create policy` falham se repetidos).
 3. Em Project Settings > API, copie a **Project URL** e a **anon/public
@@ -73,7 +73,7 @@ PYTHONPATH=. .venv/bin/uvicorn api.main:app --reload
   com `features` nulo e são analisadas na próxima vez que "Novo look" ou
   "Seus looks" abrir.
 
-## Favoritos e histórico de uso
+## Favoritos, rejeições e histórico de uso
 
 - O coração de um look (em "Novo look", "Looks" ou no detalhe) salva o look
   na tabela `outfit_favorites`; a aba "Favoritos" lista os looks salvos.
@@ -81,8 +81,14 @@ PYTHONPATH=. .venv/bin/uvicorn api.main:app --reload
   passa a mostrar há quanto tempo o look foi usado.
 - Um look é identificado pelo conjunto das peças (ids em ordem crescente),
   então o mesmo look sugerido de novo já aparece favoritado.
-- Esses dados ainda não mudam as sugestões: são a base pra o recomendador
-  evitar looks usados há pouco e aprender com os favoritos.
+- Em "Novo look", "Não curti" grava o look em `outfit_rejections` junto com
+  a ocasião, e dá pra desfazer pelo aviso que aparece.
+- Tudo isso vai junto no pedido de looks e muda as sugestões
+  ([`../model/feedback.py`](../model/feedback.py)):
+  - o look rejeitado some naquela ocasião;
+  - combinações que repetem pares de peças favoritados ganham pontos, e as
+    que repetem pares rejeitados perdem;
+  - um look usado há pouco perde pontos e volta ao topo em uns 2–3 dias.
 
 ## Telas ainda não desenhadas
 
