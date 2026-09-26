@@ -131,3 +131,62 @@ create policy "wishlist_images_delete_own"
     bucket_id = 'wishlist-images'
     and (storage.foldername(name))[1] = auth.uid()::text
   );
+
+-- Histórico de looks — favoritos e o que a usuária usou, primeiros sinais
+-- de feedback pro recomendador. Um look é o conjunto das peças que o
+-- compõem: `item_ids` guarda os ids de `clothing_items` sempre em ordem
+-- crescente (o app ordena antes de salvar), então o mesmo look vira
+-- sempre o mesmo array. Peça apagada não some daqui; o app ignora looks
+-- com peças que não existem mais.
+--
+-- Projeto que já rodou o script acima: rode só daqui pra baixo (os
+-- `create policy` de cima falham se rodados de novo).
+
+create table if not exists public.outfit_favorites (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  item_ids uuid[] not null check (cardinality(item_ids) between 1 and 4),
+  created_at timestamptz not null default now(),
+  unique (user_id, item_ids)
+);
+
+-- Uma linha por look por dia; `worn_on` é o dia local da usuária,
+-- mandado pelo app (o `current_date` do servidor está em UTC).
+create table if not exists public.outfit_wears (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  item_ids uuid[] not null check (cardinality(item_ids) between 1 and 4),
+  worn_on date not null,
+  created_at timestamptz not null default now(),
+  unique (user_id, item_ids, worn_on)
+);
+
+create index if not exists outfit_wears_user_worn_on_idx
+  on public.outfit_wears (user_id, worn_on desc);
+
+alter table public.outfit_favorites enable row level security;
+alter table public.outfit_wears enable row level security;
+
+create policy "outfit_favorites_select_own"
+  on public.outfit_favorites for select
+  using (auth.uid() = user_id);
+
+create policy "outfit_favorites_insert_own"
+  on public.outfit_favorites for insert
+  with check (auth.uid() = user_id);
+
+create policy "outfit_favorites_delete_own"
+  on public.outfit_favorites for delete
+  using (auth.uid() = user_id);
+
+create policy "outfit_wears_select_own"
+  on public.outfit_wears for select
+  using (auth.uid() = user_id);
+
+create policy "outfit_wears_insert_own"
+  on public.outfit_wears for insert
+  with check (auth.uid() = user_id);
+
+create policy "outfit_wears_delete_own"
+  on public.outfit_wears for delete
+  using (auth.uid() = user_id);

@@ -4,9 +4,11 @@ import '../models/clothing_item.dart';
 import '../models/outfit.dart';
 import '../repositories/wardrobe_repository.dart';
 import '../services/current_user.dart';
+import '../services/outfit_history.dart';
 import '../services/recommendation_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/looks_status.dart';
+import '../widgets/outfit_actions.dart';
 import '../widgets/outfit_card.dart';
 import 'outfit_detail_screen.dart';
 
@@ -30,7 +32,6 @@ class _NewLookScreenState extends State<NewLookScreen> {
   String? _selectedOccasion;
   List<Outfit> _looks = [];
   int _lookIndex = 0;
-  bool _isFavorite = false;
   bool _isLoading = true;
   String _loadingText = 'Carregando seu guarda-roupa...';
   String? _errorText;
@@ -41,6 +42,8 @@ class _NewLookScreenState extends State<NewLookScreen> {
   void initState() {
     super.initState();
     _loadWardrobe();
+    // Sem o histórico, o coração só começa vazio; não trava a sugestão.
+    OutfitHistory.instance.load().ignore();
   }
 
   Future<void> _loadWardrobe() async {
@@ -84,7 +87,6 @@ class _NewLookScreenState extends State<NewLookScreen> {
       _errorText = null;
       _looks = [];
       _lookIndex = 0;
-      _isFavorite = false;
     });
     try {
       final looks = await _recommender.recommend(
@@ -115,7 +117,6 @@ class _NewLookScreenState extends State<NewLookScreen> {
   void _nextLook() {
     setState(() {
       _lookIndex = (_lookIndex + 1) % _looks.length;
-      _isFavorite = false;
     });
   }
 
@@ -151,14 +152,17 @@ class _NewLookScreenState extends State<NewLookScreen> {
               constraints: const BoxConstraints(maxWidth: 320),
               child: AspectRatio(
                 aspectRatio: 0.85,
-                child: OutfitCard(
-                  outfit: suggestion,
-                  isFavorite: _isFavorite,
-                  onFavoriteToggle: () =>
-                      setState(() => _isFavorite = !_isFavorite),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => OutfitDetailScreen(outfit: suggestion),
+                child: ListenableBuilder(
+                  listenable: OutfitHistory.instance,
+                  builder: (context, _) => OutfitCard(
+                    outfit: suggestion,
+                    isFavorite: OutfitHistory.instance.isFavorite(suggestion),
+                    onFavoriteToggle: () =>
+                        toggleOutfitFavorite(context, suggestion),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => OutfitDetailScreen(outfit: suggestion),
+                      ),
                     ),
                   ),
                 ),

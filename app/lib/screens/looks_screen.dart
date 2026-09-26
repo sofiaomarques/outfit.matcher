@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import '../models/clothing_item.dart';
 import '../models/outfit.dart';
 import '../repositories/wardrobe_repository.dart';
+import '../services/outfit_history.dart';
 import '../services/recommendation_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/looks_status.dart';
+import '../widgets/outfit_actions.dart';
 import '../widgets/outfit_card.dart';
 import 'outfit_detail_screen.dart';
 
@@ -31,7 +33,6 @@ class _LooksScreenState extends State<LooksScreen> {
   static const _lookCount = 24;
 
   final _recommender = RecommendationService(WardrobeRepository());
-  final Set<String> _favoriteIds = {};
   String _weather = _weatherFilters.first;
   final PageController _pageController = PageController();
   int _page = 0;
@@ -48,6 +49,8 @@ class _LooksScreenState extends State<LooksScreen> {
   void initState() {
     super.initState();
     _loadWardrobe();
+    // Sem o histórico, os corações só começam vazios; não trava os looks.
+    OutfitHistory.instance.load().ignore();
   }
 
   @override
@@ -170,20 +173,14 @@ class _LooksScreenState extends State<LooksScreen> {
             ),
             itemBuilder: (context, index) {
               final outfit = page[index];
-              return OutfitCard(
-                outfit: outfit,
-                isFavorite: _favoriteIds.contains(outfit.id),
-                onFavoriteToggle: () => setState(() {
-                  if (!_favoriteIds.remove(outfit.id)) {
-                    _favoriteIds.add(outfit.id);
-                  }
-                }),
-                onTap: () => _openDetail(outfit),
-                onSave: () {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(const SnackBar(content: Text('Look salvo!')));
-                },
+              return ListenableBuilder(
+                listenable: OutfitHistory.instance,
+                builder: (context, _) => OutfitCard(
+                  outfit: outfit,
+                  isFavorite: OutfitHistory.instance.isFavorite(outfit),
+                  onFavoriteToggle: () => toggleOutfitFavorite(context, outfit),
+                  onTap: () => _openDetail(outfit),
+                ),
               );
             },
           ),

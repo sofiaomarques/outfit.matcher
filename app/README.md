@@ -14,9 +14,11 @@ O app precisa de um projeto Supabase (banco Postgres + storage de arquivos
 
 1. Crie um projeto grátis em [supabase.com](https://supabase.com).
 2. No SQL Editor do projeto, rode o conteúdo de
-   [`../supabase/schema.sql`](../supabase/schema.sql) — isso cria a
-   tabela `clothing_items`, as políticas de Row Level Security e o bucket
-   privado `clothing-images`.
+   [`../supabase/schema.sql`](../supabase/schema.sql) — isso cria as
+   tabelas (`clothing_items`, `wishlist_items`, `outfit_favorites`,
+   `outfit_wears`), as políticas de Row Level Security e os buckets
+   privados de fotos. Se o projeto já tinha rodado uma versão anterior do
+   script, rode só a parte nova (os `create policy` falham se repetidos).
 3. Em Project Settings > API, copie a **Project URL** e a **anon/public
    key**.
 4. Ative "Confirm email" em Authentication > Providers > Email se quiser
@@ -47,9 +49,11 @@ PYTHONPATH=. .venv/bin/uvicorn api.main:app --reload
 
 - `lib/theme/` — paleta de cores e tipografia
 - `lib/models/` — `ClothingItem`, `Outfit`, categorias
-- `lib/repositories/` — `WardrobeRepository`, acesso ao guarda-roupa no Supabase
+- `lib/repositories/` — acesso ao Supabase: guarda-roupa, wishlist e
+  histórico de looks (`OutfitHistoryRepository`)
 - `lib/services/` — configuração do Supabase e da API, análise de fotos
-  (`GarmentAnalysisService`) e sugestão de looks (`RecommendationService`)
+  (`GarmentAnalysisService`), sugestão de looks (`RecommendationService`) e
+  favoritos/uso dos looks compartilhados entre as telas (`OutfitHistory`)
 - `lib/widgets/` — componentes reutilizáveis (nav, cards, peça, estrela decorativa)
 - `lib/screens/` — telas (boas-vindas, login/cadastro, guarda-roupa, nova peça, looks, detalhe do look)
 
@@ -69,7 +73,18 @@ PYTHONPATH=. .venv/bin/uvicorn api.main:app --reload
   com `features` nulo e são analisadas na próxima vez que "Novo look" ou
   "Seus looks" abrir.
 
+## Favoritos e histórico de uso
+
+- O coração de um look (em "Novo look", "Looks" ou no detalhe) salva o look
+  na tabela `outfit_favorites`; a aba "Favoritos" lista os looks salvos.
+- No detalhe do look, "Usei hoje" grava o dia em `outfit_wears` e a tela
+  passa a mostrar há quanto tempo o look foi usado.
+- Um look é identificado pelo conjunto das peças (ids em ordem crescente),
+  então o mesmo look sugerido de novo já aparece favoritado.
+- Esses dados ainda não mudam as sugestões: são a base pra o recomendador
+  evitar looks usados há pouco e aprender com os favoritos.
+
 ## Telas ainda não desenhadas
 
-"Favoritos" e "Configurações" existem só como placeholder no menu — não
-faziam parte do mockup original.
+"Configurações" existe só como placeholder no menu — não fazia parte do
+mockup original.
