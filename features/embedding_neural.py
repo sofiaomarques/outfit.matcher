@@ -51,6 +51,12 @@ def gerar_embedding_completo(caminho_imagem):
 
     embedding_final = embedding_manual + embedding_neural  # 523 números
 
+    # Resultados intermediarios vao junto pra quem precisa deles (api/main.py)
+    # nao ter que rodar cores/CLIP de novo.
     return {
-        "embedding": embedding_final
+        "embedding": embedding_final,
+        "cores": cores,
+        "tipo": tipo,
+        "estampa": estampa,
+        "formalidade": formalidade,
         }
