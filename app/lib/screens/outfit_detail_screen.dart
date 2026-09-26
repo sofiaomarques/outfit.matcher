@@ -147,8 +147,9 @@ class _DetailInfo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lastWorn = this.lastWorn;
+    final wornToday =
+        lastWorn != null && DateUtils.isSameDay(lastWorn, DateTime.now());
     final wornLabel = lastWorn == null ? null : describeLastWorn(lastWorn);
-    final wornToday = wornLabel == 'Usado hoje';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

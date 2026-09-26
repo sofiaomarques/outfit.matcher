@@ -9,14 +9,12 @@ class Outfit {
     required this.items,
     required this.tags,
     this.score = 1.0,
-    this.isFavorite = false,
   });
 
   final String id;
   final List<ClothingItem> items;
   final List<String> tags;
   final double score;
-  final bool isFavorite;
 
   /// Ids das peças em ordem crescente: o mesmo look vira sempre a mesma
   /// lista, não importa a ordem em que o recomendador devolveu as peças.
