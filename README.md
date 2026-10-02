@@ -85,6 +85,10 @@ outfit.matcher/
 │
 ├── api/main.py              # API FastAPI usada pelo app
 │
+├── scripts/
+│   ├── baixar_modelos.py    # baixa os pesos (.pt) do Hugging Face Hub
+│   └── subir_modelos.py     # envia os pesos depois de um retreino
+│
 ├── app/                     # interface em Flutter (web + iOS + Android)
 │
 ├── main.py
@@ -115,7 +119,42 @@ venv\Scripts\activate     # Windows
 
 # instale as dependências
 pip install -r requirements.txt
+
+# baixe os pesos dos modelos (ficam fora do git)
+python scripts/baixar_modelos.py
 ```
+
+### Pesos dos modelos
+
+Os `.pt` não vão pro git: ficam no repositório de modelo
+[`sofiaomarques/outfit-matcher-modelos`](https://huggingface.co/sofiaomarques/outfit-matcher-modelos)
+no Hugging Face Hub (público, download sem token).
+
+| Arquivo | Usado em |
+|---|---|
+| `model/match_model_v2.pt` | `model/recomendar.py` (`/looks/recommend`) |
+| `model/clip_categoria.pt` | `features/categoria.py` (`/items/analyze`) |
+| `model/categoria_model.pt` | fallback de `features/categoria.py` |
+
+`scripts/baixar_modelos.py` só baixa o que falta em `model/`; `--atualizar`
+baixa de novo. Se algum faltar, a API sobe mesmo assim mas usa um modelo pior
+e mostra um `UserWarning` no log.
+
+Variáveis de ambiente opcionais:
+
+- `MODELOS_REPO` — outro repositório no Hub.
+- `MODELOS_REVISAO` — branch, tag ou hash de commit (padrão `main`). Em
+  produção, fixe num hash pra que um envio novo não troque o modelo sem deploy.
+
+#### Depois de um retreino
+
+```bash
+hf auth login   # uma vez, com um token de escrita
+python scripts/subir_modelos.py match_model_v2.pt -m "Retreino com X"
+```
+
+Sem argumentos envia os três. Todos os arquivos vão num único commit no Hub;
+o script imprime o hash dele, que é o valor pra `MODELOS_REVISAO`.
 
 ---
 
