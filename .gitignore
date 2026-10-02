@@ -22,3 +22,6 @@ dados/cores_recalculadas.npz
 dados/*.antes_cores.npz
 model/historico_categoria_clip.csv
 dados/validacao_real/
+
+# metadados do hf_hub_download (scripts/baixar_modelos.py)
+model/.cache/
