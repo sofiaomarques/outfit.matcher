@@ -22,10 +22,11 @@ from fastapi.responses import Response
 from PIL import Image
 from pydantic import BaseModel, Field
 
+from features.categoria import modelo_categoria_ativo
 from features.embedding_neural import VERSAO_FEATURES, gerar_embedding_completo
 from features.recorte import recortar_peca
 from model.feedback import Feedback
-from model.recomendar import CLIMAS, OCASIOES, peca_de_features, recomendar
+from model.recomendar import CLIMAS, OCASIOES, modelo_match_ativo, peca_de_features, recomendar
 
 app = FastAPI(title="Outfit Matcher API")
 
@@ -42,7 +43,17 @@ app.add_middleware(
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok"}
+    """Tambem diz quais modelos estao ativos: se um peso nao baixou, a API
+    sobe mesmo assim com um modelo pior e so avisa no log. Em producao o
+    esperado e match "v2" e categoria "clip_ajustado"."""
+    return {
+        "status": "ok",
+        "versao_features": VERSAO_FEATURES,
+        "modelos": {
+            "match": modelo_match_ativo(),
+            "categoria": modelo_categoria_ativo(),
+        },
+    }
 
 
 async def _salvar_temp(file: UploadFile) -> Path:

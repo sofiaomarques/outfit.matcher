@@ -53,6 +53,17 @@ def checkpoint_padrao() -> Path:
     warnings.warn(f"{CHECKPOINT_V2} nao existe, usando o modelo v1. Rode scripts/baixar_modelos.py.")
     return DEFAULT_OUTPUT
 
+
+def modelo_match_ativo() -> str:
+    """Qual modelo pontua os pares: "v2" (o esperado em producao), "v1" ou
+    "regra" (regra fraca, sem modelo). Mesma escolha de checkpoint_padrao e
+    pontuar_pares, sem o aviso — exposto no /health da API."""
+    if CHECKPOINT_V2.exists():
+        return "v2"
+    if DEFAULT_OUTPUT.exists():
+        return "v1"
+    return "regra"
+
 # Codigos de features/categoria.py.
 CALCA, SHORT, SAIA, VESTIDO = 1, 2, 3, 4
 TOP, CAMISETA, REGATA, JAQUETA, CASACO, BLUSA_MANGA = 5, 6, 7, 8, 9, 10

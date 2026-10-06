@@ -24,13 +24,25 @@ _MODELO_CATEGORIA = Path("model/categoria_model.pt")
 _MODELO_CLIP_AJUSTADO = Path("model/clip_categoria.pt")
 
 
+def modelo_categoria_ativo():
+    """Qual classificador `classificar_categoria` usa: "clip_ajustado" (o
+    esperado em producao), "mlp" ou "zero_shot" se faltar peso. Exposto no
+    /health da API pra que um fallback nao passe despercebido."""
+    if _MODELO_CLIP_AJUSTADO.exists():
+        return "clip_ajustado"
+    if _MODELO_CATEGORIA.exists():
+        return "mlp"
+    return "zero_shot"
+
+
 def classificar_categoria(caminho_imagem):
     imagem = Image.open(caminho_imagem).convert("RGB")
 
-    if _MODELO_CLIP_AJUSTADO.exists():
+    ativo = modelo_categoria_ativo()
+    if ativo == "clip_ajustado":
         return _classificar_com_clip_ajustado(imagem)
     warnings.warn(f"{_MODELO_CLIP_AJUSTADO} nao existe, usando classificador pior. Rode scripts/baixar_modelos.py.")
-    if _MODELO_CATEGORIA.exists():
+    if ativo == "mlp":
         return _classificar_com_modelo(imagem)
     return _classificar_zero_shot(imagem)
 
