@@ -35,6 +35,23 @@ def modelo_categoria_ativo():
     return "zero_shot"
 
 
+def carregar_modelo_categoria():
+    """Carrega o classificador ativo agora (a API chama ao subir, em vez de
+    esperar a primeira foto) e devolve o nome dele. Lanca se o peso existe mas
+    nao carrega."""
+    ativo = modelo_categoria_ativo()
+    if ativo == "clip_ajustado":
+        from model.clip_categoria import _modelo_e_processor
+
+        # Mesma chave de cache que prever_categoria_imagem usa.
+        _modelo_e_processor(str(_MODELO_CLIP_AJUSTADO))
+    elif ativo == "mlp":
+        from model.categoria_classificador import load_model
+
+        load_model(_MODELO_CATEGORIA)
+    return ativo
+
+
 def classificar_categoria(caminho_imagem):
     imagem = Image.open(caminho_imagem).convert("RGB")
 
