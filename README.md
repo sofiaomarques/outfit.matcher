@@ -157,6 +157,19 @@ python scripts/subir_modelos.py match_model_v2.pt -m "Retreino com X"
 Sem argumentos envia os três. O repositório é criado privado; `--publico` cria público. Todos os arquivos vão num único commit no Hub;
 o script imprime o hash dele, que é o valor pra `MODELOS_REVISAO`.
 
+### Docker (API)
+
+A imagem baixa tudo no build (pesos `.pt`, CLIP e os modelos do rembg), então
+a primeira requisição não baixa nada. Como o repositório de pesos é privado, o
+token de leitura entra como secret do BuildKit (não fica em nenhuma camada):
+
+```bash
+HF_TOKEN=hf_... docker build --secret id=hf_token,env=HF_TOKEN -t outfit-api .
+docker run --rm -p 8000:8000 outfit-api   # a porta vem de $PORT (padrão 8000)
+```
+
+Pra fixar a versão dos pesos: `--build-arg MODELOS_REVISAO=<hash do commit no Hub>`.
+
 ---
 
 ## 🚀 Como usar

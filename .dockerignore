@@ -1,0 +1,16 @@
+.git
+.venv
+venv
+__pycache__
+*.py[cod]
+.DS_Store
+
+# dados de treino e o app Flutter nao entram na imagem da API
+dados
+app
+supabase
+
+# pesos vem do Hugging Face Hub no build (scripts/baixar_modelos.py), nunca da maquina local
+model/*.pt
+model/.cache
+model/historico_*.csv
