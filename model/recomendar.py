@@ -33,6 +33,7 @@ from functools import lru_cache
 from itertools import product
 from pathlib import Path
 from typing import Any
+import warnings
 
 import numpy as np
 import torch
@@ -47,7 +48,10 @@ CHECKPOINT_V2 = Path("model/match_model_v2.pt")
 
 
 def checkpoint_padrao() -> Path:
-    return CHECKPOINT_V2 if CHECKPOINT_V2.exists() else DEFAULT_OUTPUT
+    if CHECKPOINT_V2.exists():
+        return CHECKPOINT_V2
+    warnings.warn(f"{CHECKPOINT_V2} nao existe, usando o modelo v1. Rode scripts/baixar_modelos.py.")
+    return DEFAULT_OUTPUT
 
 # Codigos de features/categoria.py.
 CALCA, SHORT, SAIA, VESTIDO = 1, 2, 3, 4
@@ -209,6 +213,8 @@ def pontuar_pares(pares: list[tuple[Peca, Peca]], checkpoint_path: Path | None =
         return []
     checkpoint_path = checkpoint_path or checkpoint_padrao()
     if not checkpoint_path.exists():
+        warnings.warn(f"{checkpoint_path} nao existe, usando a regra fraca no lugar do modelo.")
+
         def item(peca: Peca, tipo: int) -> PreparedItem:
             return PreparedItem(peca.id, "", "", tipo, peca.embedding)
 

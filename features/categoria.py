@@ -1,3 +1,4 @@
+import warnings
 from pathlib import Path
 
 import torch
@@ -28,6 +29,7 @@ def classificar_categoria(caminho_imagem):
 
     if _MODELO_CLIP_AJUSTADO.exists():
         return _classificar_com_clip_ajustado(imagem)
+    warnings.warn(f"{_MODELO_CLIP_AJUSTADO} nao existe, usando classificador pior. Rode scripts/baixar_modelos.py.")
     if _MODELO_CATEGORIA.exists():
         return _classificar_com_modelo(imagem)
     return _classificar_zero_shot(imagem)
