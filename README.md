@@ -164,11 +164,20 @@ a primeira requisição não baixa nada. Como o repositório de pesos é privado
 token de leitura entra como secret do BuildKit (não fica em nenhuma camada):
 
 ```bash
-HF_TOKEN=hf_... docker build --secret id=HF_TOKEN -t outfit-api .
-docker run --rm -p 8000:8000 outfit-api   # a porta vem de $PORT (padrão 8000)
+HF_TOKEN=hf_... docker build --secret id=HF_TOKEN \
+  --build-arg MODELOS_REVISAO=<hash do commit no Hub> -t outfit-api .
+docker run --rm -p 8000:7860 outfit-api
 ```
 
-Pra fixar a versão dos pesos: `--build-arg MODELOS_REVISAO=<hash do commit no Hub>`.
+- `MODELOS_REVISAO` é obrigatório e tem que ser um hash de commit (40
+  caracteres), não `main`: com um nome de branch, o Docker reaproveitaria a
+  camada dos pesos do cache e um envio novo nunca entraria na imagem. O
+  `subir_modelos.py` imprime o hash; pra pegar o atual:
+  `python -c "from huggingface_hub import HfApi; print(HfApi().model_info('sofiaomarques/outfit-matcher-modelos').sha)"`.
+- A porta vem de `$PORT`, padrão 7860 (a que o Hugging Face Spaces espera). O
+  app procura a API em `localhost:8000`, daí o `-p 8000:7860`.
+- `curl localhost:8000/health` mostra a revisão dos pesos e os modelos que
+  carregaram; `"status": "degradado"` quando algum não é o de produção.
 
 ---
 
@@ -291,9 +300,27 @@ PYTHONPATH=. .venv/bin/uvicorn api.main:app --reload
 
 | Endpoint | O que faz |
 |---|---|
+| `GET /health` | `versao_features`, revisão dos pesos e quais modelos carregaram (em produção: match `v2`, categoria `clip_ajustado`; senão `status: "degradado"`) |
 | `POST /items/crop` | recorta a peça da foto (PNG transparente) |
 | `POST /items/analyze` | cor, categoria, estampa, formalidade e embedding de 523 números |
 | `POST /looks/recommend` | recebe as peças com features + ocasião/clima e devolve os looks |
+
+### Testes
+
+Testam o contrato entre o app e a API: o formato que o app manda e espera
+receber, que as constantes repetidas no Dart (`featuresVersion`, ocasiões,
+climas, categorias) batem com as do Python, e que a API está com os modelos de
+produção (precisa dos pesos baixados). Rode da raiz do repo:
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+O guarda-roupa de teste (`tests/fixtures/guarda_roupa.json`) é a saída real de
+`/items/analyze`. Quando `VERSAO_FEATURES` mudar, gere de novo com
+`PYTHONPATH=. python tests/gerar_fixture.py` (precisa de `dados/validacao_real/`
+e da cópia limpa do Kaggle).
 
 ---
 

@@ -47,11 +47,37 @@ from model.treinar import DEFAULT_OUTPUT, choose_device, load_model, select_feat
 CHECKPOINT_V2 = Path("model/match_model_v2.pt")
 
 
-def checkpoint_padrao() -> Path:
-    if CHECKPOINT_V2.exists():
-        return CHECKPOINT_V2
-    warnings.warn(f"{CHECKPOINT_V2} nao existe, usando o modelo v1. Rode scripts/baixar_modelos.py.")
-    return DEFAULT_OUTPUT
+# Em ordem de preferencia; sem nenhum, pontuar_pares usa a regra fraca.
+CHECKPOINTS_MATCH = {"v2": CHECKPOINT_V2, "v1": DEFAULT_OUTPUT}
+
+
+def modelo_match_ativo() -> str:
+    """Qual modelo pontua os pares: "v2" (o esperado em producao), "v1" ou
+    "regra" (regra fraca, sem modelo). Unica fonte da escolha: o /health da
+    API, checkpoint_padrao e pontuar_pares derivam daqui."""
+    for nome, caminho in CHECKPOINTS_MATCH.items():
+        if caminho.exists():
+            return nome
+    return "regra"
+
+
+def checkpoint_padrao() -> Path | None:
+    """Checkpoint do modelo ativo; None = regra fraca."""
+    ativo = modelo_match_ativo()
+    if ativo != "v2":
+        warnings.warn(f"{CHECKPOINT_V2} nao existe, usando {ativo}. Rode scripts/baixar_modelos.py.")
+    return CHECKPOINTS_MATCH.get(ativo)
+
+
+def carregar_modelo_match() -> str:
+    """Carrega o modelo ativo agora (a API chama ao subir, em vez de esperar a
+    primeira recomendacao) e devolve o nome dele. Lanca se o peso existe mas
+    nao carrega."""
+    ativo = modelo_match_ativo()
+    if ativo in CHECKPOINTS_MATCH:
+        caminho = CHECKPOINTS_MATCH[ativo]
+        _carregar_modelo(str(caminho), caminho.stat().st_mtime)
+    return ativo
 
 # Codigos de features/categoria.py.
 CALCA, SHORT, SAIA, VESTIDO = 1, 2, 3, 4
@@ -212,8 +238,8 @@ def pontuar_pares(pares: list[tuple[Peca, Peca]], checkpoint_path: Path | None =
     if not pares:
         return []
     checkpoint_path = checkpoint_path or checkpoint_padrao()
-    if not checkpoint_path.exists():
-        warnings.warn(f"{checkpoint_path} nao existe, usando a regra fraca no lugar do modelo.")
+    if checkpoint_path is None or not checkpoint_path.exists():
+        warnings.warn(f"{checkpoint_path or 'Modelo de pares'} nao existe, usando a regra fraca no lugar do modelo.")
 
         def item(peca: Peca, tipo: int) -> PreparedItem:
             return PreparedItem(peca.id, "", "", tipo, peca.embedding)

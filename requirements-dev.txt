@@ -1,0 +1,3 @@
+# Testes (fora da imagem Docker). httpx, usado pelo TestClient, ja vem do requirements.txt.
+-r requirements.txt
+pytest==9.1.1

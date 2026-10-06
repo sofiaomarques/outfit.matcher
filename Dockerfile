@@ -5,11 +5,13 @@
 # HF_TOKEN porque o Hugging Face Spaces monta cada secret do Space com o nome
 # dele; localmente, sem `src`, o docker le a variavel de ambiente de mesmo nome:
 #
-#   HF_TOKEN=hf_... docker build --secret id=HF_TOKEN -t outfit-api .
+#   HF_TOKEN=hf_... docker build --secret id=HF_TOKEN \
+#       --build-arg MODELOS_REVISAO=<hash do commit no Hub> -t outfit-api .
 #
-# Run — a porta vem de $PORT (padrao 8000):
+# Run — a porta vem de $PORT (padrao 7860, a que o Hugging Face Spaces espera);
+# mapeada pra 8000, que e onde o app procura a API em dev:
 #
-#   docker run --rm -p 8000:8000 outfit-api
+#   docker run --rm -p 8000:7860 outfit-api
 #
 # Tudo que a API baixaria na primeira requisicao (pesos .pt, CLIP, rembg) e
 # baixado aqui no build; em runtime o Hub fica offline.
@@ -45,13 +47,22 @@ CLIPProcessor.from_pretrained('openai/clip-vit-base-patch32'); \
 from rembg import new_session; \
 new_session('u2net_cloth_seg'); new_session('u2net')"
 
-# Pesos proprios (.pt). Fixe MODELOS_REVISAO num hash de commit do Hub pra que
-# um envio novo nao mude o modelo sem um deploy (subir_modelos.py imprime o hash).
-ARG MODELOS_REVISAO=main
+# Pesos proprios (.pt), sempre de um commit fixo do Hub: com um nome de branch
+# (main), o docker reaproveitaria esta camada do cache e um envio novo nunca
+# entraria na imagem. subir_modelos.py imprime o hash; no Spaces ele vem da
+# variavel MODELOS_REVISAO do Space. `required`: sem o secret, falha aqui em vez
+# de chegar ao Hub sem token.
+ARG MODELOS_REVISAO
 COPY scripts/ scripts/
-RUN --mount=type=secret,id=HF_TOKEN \
-    HF_TOKEN="$(cat /run/secrets/HF_TOKEN)" MODELOS_REVISAO="$MODELOS_REVISAO" \
+RUN --mount=type=secret,id=HF_TOKEN,required=true \
+    if ! echo "$MODELOS_REVISAO" | grep -Eq '^[0-9a-f]{40}$'; then \
+        echo "Passe --build-arg MODELOS_REVISAO=<hash de 40 caracteres do commit no Hub>" >&2; \
+        exit 1; \
+    fi \
+    && HF_TOKEN="$(cat /run/secrets/HF_TOKEN)" MODELOS_REVISAO="$MODELOS_REVISAO" \
     python scripts/baixar_modelos.py
+# Exposto no /health (revisao_modelos).
+ENV MODELOS_REVISAO=$MODELOS_REVISAO
 
 COPY api/ api/
 COPY features/ features/
@@ -65,5 +76,5 @@ ENV HF_HUB_OFFLINE=1
 RUN useradd --create-home --uid 1000 app
 USER app
 
-EXPOSE 8000
-CMD ["sh", "-c", "exec uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+EXPOSE 7860
+CMD ["sh", "-c", "exec uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-7860}"]

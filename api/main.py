@@ -11,7 +11,11 @@ local.
 from __future__ import annotations
 
 import io
+import logging
+import os
 import tempfile
+from collections.abc import Callable
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
 
@@ -22,12 +26,40 @@ from fastapi.responses import Response
 from PIL import Image
 from pydantic import BaseModel, Field
 
+from features.categoria import carregar_modelo_categoria
 from features.embedding_neural import VERSAO_FEATURES, gerar_embedding_completo
 from features.recorte import recortar_peca
 from model.feedback import Feedback
-from model.recomendar import CLIMAS, OCASIOES, peca_de_features, recomendar
+from model.recomendar import CLIMAS, OCASIOES, carregar_modelo_match, peca_de_features, recomendar
 
-app = FastAPI(title="Outfit Matcher API")
+log = logging.getLogger("uvicorn.error")
+
+# O que deve estar carregado em producao; qualquer outra coisa deixa o
+# /health "degradado".
+MODELOS_ESPERADOS = {"match": "v2", "categoria": "clip_ajustado"}
+
+
+def _carregar(nome: str, carregar: Callable[[], str]) -> str:
+    try:
+        return carregar()
+    except Exception:
+        log.exception("Falha ao carregar o modelo de %s", nome)
+        return "erro"
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Carrega os modelos ao subir, nao na primeira requisicao: o /health so
+    # responde depois disso e mostra o que de fato carregou — um .pt que
+    # existe mas nao carrega aparece como "erro", nao como o modelo esperado.
+    app.state.modelos = {
+        "match": _carregar("match", carregar_modelo_match),
+        "categoria": _carregar("categoria", carregar_modelo_categoria),
+    }
+    yield
+
+
+app = FastAPI(title="Outfit Matcher API", lifespan=lifespan)
 
 # CORS liberado pra qualquer origem: servico ainda so roda local pra dev,
 # sem dado sensivel exposto (a foto ja chega via upload autenticado no
@@ -42,7 +74,18 @@ app.add_middleware(
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok"}
+    """Tambem diz quais modelos carregaram: se um peso nao baixou ou nao
+    carrega, a API sobe mesmo assim (com um modelo pior, ou dando erro so na
+    rota que usa ele) e o status vira "degradado" — sempre com 200, porque o
+    app continua funcionando. `revisao_modelos` e o commit do Hub de onde os
+    pesos vieram (so na imagem Docker)."""
+    modelos = app.state.modelos
+    return {
+        "status": "ok" if modelos == MODELOS_ESPERADOS else "degradado",
+        "versao_features": VERSAO_FEATURES,
+        "revisao_modelos": os.environ.get("MODELOS_REVISAO"),
+        "modelos": modelos,
+    }
 
 
 async def _salvar_temp(file: UploadFile) -> Path:
