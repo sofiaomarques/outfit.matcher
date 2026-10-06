@@ -14,15 +14,18 @@ from fastapi.testclient import TestClient
 
 from api.main import app
 from features.embedding_neural import VERSAO_FEATURES
-from model.recomendar import CLIMAS, OCASIOES
+import api.main
+from model.recomendar import CAMADAS, CLIMAS, OCASIOES
 
 FIXTURE = Path("tests/fixtures/guarda_roupa.json")
 FOTO = Path("dados/roupas/saia.jpg")
 
 
 @pytest.fixture(scope="module")
-def cliente() -> TestClient:
-    return TestClient(app)
+def cliente():
+    # Com `with`, o TestClient roda o lifespan (que carrega os modelos).
+    with TestClient(app) as cliente:
+        yield cliente
 
 
 @pytest.fixture(scope="module")
@@ -38,33 +41,53 @@ def _recomendar(cliente: TestClient, pecas: list[dict], **extra) -> dict:
 
 def _checar_looks(looks: list[dict], pecas: list[dict]) -> None:
     """O app monta cada look com `byId[id]!`: um id que ele nao mandou
-    derruba a tela."""
-    categoria = {p["id"]: p["categoria"] for p in pecas}
+    derruba a tela. E todo look tem que ser vestivel: vestido sozinho ou
+    cima + um baixo, com no maximo uma camada (jaqueta/casaco) por cima."""
+    por_id = {p["id"]: p for p in pecas}
     vistos = set()
     for look in looks:
         ids = look["pecas"]
-        assert set(ids) <= categoria.keys()
+        assert set(ids) <= por_id.keys()
         assert len(ids) == len(set(ids)), f"peca repetida no look {ids}"
         assert frozenset(ids) not in vistos, f"look repetido {ids}"
         vistos.add(frozenset(ids))
 
-        cats = [categoria[i] for i in ids]
+        cats = [por_id[i]["categoria"] for i in ids]
+        tops = [por_id[i] for i in ids if por_id[i]["categoria"] == "top"]
+        camadas = [p for p in tops if p["features"]["categoria_codigo"] in CAMADAS]
         baixos = cats.count("bottom") + cats.count("skirt")
         if "dress" in cats:
             assert cats.count("dress") == 1 and baixos == 0, ids
+            assert len(tops) == len(camadas) <= 1, f"vestido so aceita uma camada: {ids}"
         else:
-            assert baixos == 1 and "top" in cats, ids
+            assert baixos == 1 and 1 <= len(tops) <= 2, ids
+            # A peca de cima pode ser uma jaqueta (sem outro top), mas com
+            # duas, uma delas tem que ser a camada.
+            assert len(tops) == 1 or camadas, f"dois tops sem camada: {ids}"
 
 
 def test_health_mostra_os_modelos_de_producao(cliente):
     resposta = cliente.get("/health")
     assert resposta.status_code == 200
     corpo = resposta.json()
-    assert corpo["status"] == "ok"
     assert corpo["versao_features"] == VERSAO_FEATURES
+    assert "revisao_modelos" in corpo
     assert corpo["modelos"] == {"match": "v2", "categoria": "clip_ajustado"}, (
-        "API caiu num modelo pior: rode scripts/baixar_modelos.py (e rode o pytest da raiz do repo)"
+        "API caiu num modelo pior: rode scripts/baixar_modelos.py"
     )
+    assert corpo["status"] == "ok"
+
+
+def test_health_degradado_quando_um_peso_nao_carrega(monkeypatch):
+    def quebrado() -> str:
+        raise RuntimeError("checkpoint corrompido")
+
+    monkeypatch.setattr(api.main, "carregar_modelo_match", quebrado)
+    with TestClient(app) as cliente:
+        corpo = cliente.get("/health").json()
+    assert corpo["status"] == "degradado"
+    assert corpo["modelos"]["match"] == "erro"
+    assert corpo["modelos"]["categoria"] == "clip_ajustado"
 
 
 def test_fixture_na_versao_atual_das_features(pecas):
@@ -127,7 +150,13 @@ def test_guarda_roupa_vazio_nao_quebra(cliente):
 
 def test_feedback_no_formato_do_app_tira_o_look_rejeitado(cliente, pecas):
     antes = _recomendar(cliente, pecas, ocasiao="trabalho")["looks"]
-    rejeitado = antes[0]["pecas"]
+    # Um look so cima + baixo (sem vestido nem camada), pra que as pecas dele
+    # so formem ele mesmo (usado no fim do teste).
+    categoria = {p["id"]: p["categoria"] for p in pecas}
+    rejeitado = next(
+        look["pecas"] for look in antes
+        if len(look["pecas"]) == 2 and "dress" not in {categoria[i] for i in look["pecas"]}
+    )
     # Mesmo formato de _feedbackPayload() em recommendation_service.dart.
     feedback = {
         "favoritos": [antes[1]["pecas"]],
@@ -138,9 +167,13 @@ def test_feedback_no_formato_do_app_tira_o_look_rejeitado(cliente, pecas):
     assert sorted(rejeitado) not in [sorted(look["pecas"]) for look in depois]
     _checar_looks(depois, pecas)
 
-    # A rejeicao vale so pra ocasiao em que foi dada.
-    festa = _recomendar(cliente, pecas, ocasiao="festa", feedback=feedback, top_k=50)["looks"]
-    assert sorted(rejeitado) in [sorted(look["pecas"]) for look in festa]
+    # So com as pecas do look rejeitado, ele e a unica combinacao possivel: em
+    # trabalho nao sobra nada (rejeicao nao relaxa como os filtros), e em festa
+    # ele volta — a rejeicao vale so pra ocasiao em que foi dada.
+    so_ele = [p for p in pecas if p["id"] in rejeitado]
+    assert _recomendar(cliente, so_ele, ocasiao="trabalho", feedback=feedback)["looks"] == []
+    festa = _recomendar(cliente, so_ele, ocasiao="festa", feedback=feedback)["looks"]
+    assert [sorted(look["pecas"]) for look in festa] == [sorted(rejeitado)]
 
 
 def test_guarda_roupa_grande(cliente, pecas):
