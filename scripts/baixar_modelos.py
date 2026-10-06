@@ -1,6 +1,7 @@
 """Baixa os pesos dos modelos do Hugging Face Hub pra `model/`.
 
-Os `.pt` ficam fora do git (`model/*.pt` no .gitignore). Numa maquina limpa,
+Os `.pt` ficam fora do git (`model/*.pt` no .gitignore). O repositorio do Hub
+e privado: faca `hf auth login` (ou defina HF_TOKEN) antes. Numa maquina limpa,
 rode antes de subir a API:
 
     python scripts/baixar_modelos.py

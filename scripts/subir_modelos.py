@@ -1,7 +1,7 @@
 """Envia os pesos de `model/` pro Hugging Face Hub depois de um retreino.
 
 Precisa de login com permissao de escrita (`hf auth login`). Cria o
-repositorio (publico) se ainda nao existir. Cada envio vira um commit no Hub;
+repositorio (privado, a menos que use --publico) se ainda nao existir. Cada envio vira um commit no Hub;
 o hash dele pode ser usado em MODELOS_REVISAO pra fixar a versao em producao.
 
     python scripts/subir_modelos.py match_model_v2.pt -m "Retreino com pares v2"
@@ -21,6 +21,7 @@ from baixar_modelos import ARQUIVOS, PASTA_MODELOS, REPO_PADRAO
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Envia os pesos de model/ pro Hugging Face Hub.")
     parser.add_argument("--repo", default=os.environ.get("MODELOS_REPO", REPO_PADRAO))
+    parser.add_argument("--publico", action="store_true", help="cria o repositorio como publico (padrao: privado)")
     parser.add_argument("-m", "--mensagem", default="Atualiza pesos dos modelos")
     parser.add_argument("arquivos", nargs="*", default=list(ARQUIVOS), help="padrao: todos")
     return parser.parse_args()
@@ -38,7 +39,7 @@ def main() -> int:
         return 1
 
     api = HfApi()
-    api.create_repo(args.repo, repo_type="model", private=False, exist_ok=True)
+    api.create_repo(args.repo, repo_type="model", private=not args.publico, exist_ok=True)
     # Um commit so pra todos os arquivos: nunca fica um modelo novo com outro velho no Hub.
     operacoes = [
         CommitOperationAdd(path_in_repo=nome, path_or_fileobj=PASTA_MODELOS / nome)

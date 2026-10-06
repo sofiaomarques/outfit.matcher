@@ -128,7 +128,7 @@ python scripts/baixar_modelos.py
 
 Os `.pt` não vão pro git: ficam no repositório de modelo
 [`sofiaomarques/outfit-matcher-modelos`](https://huggingface.co/sofiaomarques/outfit-matcher-modelos)
-no Hugging Face Hub (público, download sem token).
+no Hugging Face Hub (privado: precisa de `hf auth login` ou da variável `HF_TOKEN` pra baixar).
 
 | Arquivo | Usado em |
 |---|---|
@@ -143,6 +143,7 @@ e mostra um `UserWarning` no log.
 Variáveis de ambiente opcionais:
 
 - `MODELOS_REPO` — outro repositório no Hub.
+- `HF_TOKEN` — token de leitura do Hugging Face, pra baixar sem `hf auth login` (ex.: no deploy).
 - `MODELOS_REVISAO` — branch, tag ou hash de commit (padrão `main`). Em
   produção, fixe num hash pra que um envio novo não troque o modelo sem deploy.
 
@@ -153,7 +154,7 @@ hf auth login   # uma vez, com um token de escrita
 python scripts/subir_modelos.py match_model_v2.pt -m "Retreino com X"
 ```
 
-Sem argumentos envia os três. Todos os arquivos vão num único commit no Hub;
+Sem argumentos envia os três. O repositório é criado privado; `--publico` cria público. Todos os arquivos vão num único commit no Hub;
 o script imprime o hash dele, que é o valor pra `MODELOS_REVISAO`.
 
 ---
