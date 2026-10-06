@@ -164,7 +164,7 @@ a primeira requisição não baixa nada. Como o repositório de pesos é privado
 token de leitura entra como secret do BuildKit (não fica em nenhuma camada):
 
 ```bash
-HF_TOKEN=hf_... docker build --secret id=hf_token,env=HF_TOKEN -t outfit-api .
+HF_TOKEN=hf_... docker build --secret id=HF_TOKEN -t outfit-api .
 docker run --rm -p 8000:8000 outfit-api   # a porta vem de $PORT (padrão 8000)
 ```
 

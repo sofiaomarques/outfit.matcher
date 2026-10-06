@@ -1,9 +1,11 @@
 # API do Outfit Matcher (api/main.py).
 #
 # Build — o repositorio de pesos no Hugging Face Hub e privado, entao o token
-# de leitura entra como secret do BuildKit (nao fica em nenhuma camada):
+# de leitura entra como secret do BuildKit (nao fica em nenhuma camada). O id e
+# HF_TOKEN porque o Hugging Face Spaces monta cada secret do Space com o nome
+# dele; localmente, sem `src`, o docker le a variavel de ambiente de mesmo nome:
 #
-#   HF_TOKEN=hf_... docker build --secret id=hf_token,env=HF_TOKEN -t outfit-api .
+#   HF_TOKEN=hf_... docker build --secret id=HF_TOKEN -t outfit-api .
 #
 # Run — a porta vem de $PORT (padrao 8000):
 #
@@ -47,8 +49,8 @@ new_session('u2net_cloth_seg'); new_session('u2net')"
 # um envio novo nao mude o modelo sem um deploy (subir_modelos.py imprime o hash).
 ARG MODELOS_REVISAO=main
 COPY scripts/ scripts/
-RUN --mount=type=secret,id=hf_token \
-    HF_TOKEN="$(cat /run/secrets/hf_token)" MODELOS_REVISAO="$MODELOS_REVISAO" \
+RUN --mount=type=secret,id=HF_TOKEN \
+    HF_TOKEN="$(cat /run/secrets/HF_TOKEN)" MODELOS_REVISAO="$MODELOS_REVISAO" \
     python scripts/baixar_modelos.py
 
 COPY api/ api/
@@ -59,7 +61,8 @@ COPY model/ model/
 # primeira requisicao.
 ENV HF_HUB_OFFLINE=1
 
-RUN useradd --create-home app
+# uid 1000: e com ele que o Hugging Face Spaces roda o container.
+RUN useradd --create-home --uid 1000 app
 USER app
 
 EXPOSE 8000
