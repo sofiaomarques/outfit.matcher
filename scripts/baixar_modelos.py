@@ -59,7 +59,11 @@ def main() -> int:
             continue
         print(f"{nome}: baixando de {args.repo}@{args.revisao}")
         try:
-            hf_hub_download(args.repo, nome, revision=args.revisao, local_dir=PASTA_MODELOS)
+            hf_hub_download(
+                args.repo, nome, revision=args.revisao, local_dir=PASTA_MODELOS,
+                # Sem isso, com o Hub fora do ar e o arquivo local presente, o download "passa" em silencio.
+                force_download=args.atualizar,
+            )
         except Exception as erro:
             print(f"{nome}: falhou ({erro})", file=sys.stderr)
             falhas += 1
