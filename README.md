@@ -291,9 +291,27 @@ PYTHONPATH=. .venv/bin/uvicorn api.main:app --reload
 
 | Endpoint | O que faz |
 |---|---|
+| `GET /health` | status, `versao_features` e quais modelos estão ativos (em produção: match `v2`, categoria `clip_ajustado`) |
 | `POST /items/crop` | recorta a peça da foto (PNG transparente) |
 | `POST /items/analyze` | cor, categoria, estampa, formalidade e embedding de 523 números |
 | `POST /looks/recommend` | recebe as peças com features + ocasião/clima e devolve os looks |
+
+### Testes
+
+Testam o contrato entre o app e a API: o formato que o app manda e espera
+receber, que as constantes repetidas no Dart (`featuresVersion`, ocasiões,
+climas, categorias) batem com as do Python, e que a API está com os modelos de
+produção (precisa dos pesos baixados). Rode da raiz do repo:
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+O guarda-roupa de teste (`tests/fixtures/guarda_roupa.json`) é a saída real de
+`/items/analyze`. Quando `VERSAO_FEATURES` mudar, gere de novo com
+`PYTHONPATH=. python tests/gerar_fixture.py` (precisa de `dados/validacao_real/`
+e da cópia limpa do Kaggle).
 
 ---
 
