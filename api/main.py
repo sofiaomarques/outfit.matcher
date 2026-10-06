@@ -14,6 +14,7 @@ import io
 import logging
 import os
 import tempfile
+import threading
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -88,8 +89,17 @@ def health() -> dict:
     }
 
 
-async def _salvar_temp(file: UploadFile) -> Path:
-    conteudo = await file.read()
+# As rotas de foto sao `def`, nao `async def`: o FastAPI roda cada uma numa
+# thread do threadpool, e o CLIP + rembg (segundos de CPU) nao travam o event
+# loop — /health e /looks/recommend seguem respondendo durante uma analise.
+# Mas uma foto por vez: o tokenizer compartilhado do CLIP (estampa,
+# formalidade) nao e thread-safe ("Already borrowed"), e com 2 vCPUs duas
+# analises em paralelo nao terminam antes, so somam memoria.
+_pipeline_fotos = threading.Lock()
+
+
+def _salvar_temp(file: UploadFile) -> Path:
+    conteudo = file.file.read()
     if not conteudo:
         raise HTTPException(status_code=400, detail="Arquivo vazio.")
 
@@ -124,14 +134,15 @@ def _achatar_em_fundo_branco(caminho: Path) -> None:
 
 
 @app.post("/items/analyze")
-async def analyze_item(file: UploadFile = File(...)) -> dict:
+def analyze_item(file: UploadFile = File(...)) -> dict:
     """Roda o pipeline completo sobre a foto de uma peça: cor, categoria,
     tipo, estampa, formalidade e o embedding de 523 números usado pelo
     modelo de match (`model/match_model.pt`)."""
-    caminho = await _salvar_temp(file)
+    caminho = _salvar_temp(file)
     try:
         _achatar_em_fundo_branco(caminho)
-        resultado = gerar_embedding_completo(str(caminho))
+        with _pipeline_fotos:
+            resultado = gerar_embedding_completo(str(caminho))
     finally:
         caminho.unlink(missing_ok=True)
 
@@ -153,13 +164,14 @@ async def analyze_item(file: UploadFile = File(...)) -> dict:
 
 
 @app.post("/items/crop")
-async def crop_item(file: UploadFile = File(...)) -> Response:
+def crop_item(file: UploadFile = File(...)) -> Response:
     """Recorta a peça de roupa da foto (remove corpo/fundo) e devolve um PNG
     com fundo transparente, pronto pra virar a miniatura no guarda-roupa —
     em vez da foto da pessoa vestindo a peça inteira."""
-    caminho = await _salvar_temp(file)
+    caminho = _salvar_temp(file)
     try:
-        recorte = recortar_peca(str(caminho))
+        with _pipeline_fotos:
+            recorte = recortar_peca(str(caminho))
     finally:
         caminho.unlink(missing_ok=True)
 
