@@ -164,11 +164,20 @@ a primeira requisição não baixa nada. Como o repositório de pesos é privado
 token de leitura entra como secret do BuildKit (não fica em nenhuma camada):
 
 ```bash
-HF_TOKEN=hf_... docker build --secret id=HF_TOKEN -t outfit-api .
-docker run --rm -p 8000:8000 outfit-api   # a porta vem de $PORT (padrão 8000)
+HF_TOKEN=hf_... docker build --secret id=HF_TOKEN \
+  --build-arg MODELOS_REVISAO=<hash do commit no Hub> -t outfit-api .
+docker run --rm -p 8000:7860 outfit-api
 ```
 
-Pra fixar a versão dos pesos: `--build-arg MODELOS_REVISAO=<hash do commit no Hub>`.
+- `MODELOS_REVISAO` é obrigatório e tem que ser um hash de commit (40
+  caracteres), não `main`: com um nome de branch, o Docker reaproveitaria a
+  camada dos pesos do cache e um envio novo nunca entraria na imagem. O
+  `subir_modelos.py` imprime o hash; pra pegar o atual:
+  `python -c "from huggingface_hub import HfApi; print(HfApi().model_info('sofiaomarques/outfit-matcher-modelos').sha)"`.
+- A porta vem de `$PORT`, padrão 7860 (a que o Hugging Face Spaces espera). O
+  app procura a API em `localhost:8000`, daí o `-p 8000:7860`.
+- `curl localhost:8000/health` mostra a revisão dos pesos e os modelos que
+  carregaram; `"status": "degradado"` quando algum não é o de produção.
 
 ---
 
@@ -291,7 +300,7 @@ PYTHONPATH=. .venv/bin/uvicorn api.main:app --reload
 
 | Endpoint | O que faz |
 |---|---|
-| `GET /health` | status, `versao_features` e quais modelos estão ativos (em produção: match `v2`, categoria `clip_ajustado`) |
+| `GET /health` | `versao_features`, revisão dos pesos e quais modelos carregaram (em produção: match `v2`, categoria `clip_ajustado`; senão `status: "degradado"`) |
 | `POST /items/crop` | recorta a peça da foto (PNG transparente) |
 | `POST /items/analyze` | cor, categoria, estampa, formalidade e embedding de 523 números |
 | `POST /looks/recommend` | recebe as peças com features + ocasião/clima e devolve os looks |
