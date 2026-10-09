@@ -166,7 +166,7 @@ token de leitura entra como secret do BuildKit (não fica em nenhuma camada):
 ```bash
 HF_TOKEN=hf_... docker build --secret id=HF_TOKEN \
   --build-arg MODELOS_REVISAO=<hash do commit no Hub> -t outfit-api .
-docker run --rm -p 8000:7860 outfit-api
+docker run --rm -p 8000:7860 -e SUPABASE_URL=https://SEU-PROJETO.supabase.co outfit-api
 ```
 
 - `MODELOS_REVISAO` é obrigatório e tem que ser um hash de commit (40
@@ -295,15 +295,26 @@ Climas: `calor`, `frio`, `chuva`.
 ### API
 
 ```bash
-PYTHONPATH=. .venv/bin/uvicorn api.main:app --reload
+SUPABASE_URL=https://SEU-PROJETO.supabase.co PYTHONPATH=. .venv/bin/uvicorn api.main:app --reload
 ```
 
 | Endpoint | O que faz |
 |---|---|
-| `GET /health` | `versao_features`, revisão dos pesos e quais modelos carregaram (em produção: match `v2`, categoria `clip_ajustado`; senão `status: "degradado"`) |
+| `GET /health` | `versao_features`, revisão dos pesos e quais modelos carregaram (em produção: match `v2`, categoria `clip_ajustado`; senão `status: "degradado"`). Aberto, sem login |
 | `POST /items/crop` | recorta a peça da foto (PNG transparente) |
 | `POST /items/analyze` | cor, categoria, estampa, formalidade e embedding de 523 números |
 | `POST /looks/recommend` | recebe as peças com features + ocasião/clima e devolve os looks |
+
+A API é pública, então as três rotas `POST` exigem
+`Authorization: Bearer <access token da sessão do Supabase>` (o app manda
+sozinho) e respondem 401 sem ele. Fotos acima de 10 MB ou 25 megapixels dão 413.
+
+| Variável | Pra quê |
+|---|---|
+| `SUPABASE_URL` | projeto que emite os tokens; as chaves públicas vêm de `<SUPABASE_URL>/auth/v1/.well-known/jwks.json`. Obrigatória: sem ela (nem `API_SEM_AUTH`), a API não sobe |
+| `SUPABASE_JWT_SECRET` | só se o projeto usa o JWT secret legado (HS256) |
+| `ALLOWED_ORIGINS` | domínios do site, separados por vírgula (ex.: `https://wable.app`). Sem ela, o CORS libera só `localhost` |
+| `API_SEM_AUTH=1` | desliga o login; só pra dev local e testes |
 
 ### Testes
 

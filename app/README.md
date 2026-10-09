@@ -39,11 +39,18 @@ configuração está ausente, sem quebrar.
 
 Em outro terminal, na raiz do repositório, suba a API (recorte, análise das
 fotos e sugestão de looks). O app procura em `http://localhost:8000`; pra
-outro endereço, passe `--dart-define=API_BASE_URL=...`.
+outro endereço, passe `--dart-define=API_BASE_URL=...`. A API só aceita
+chamadas de quem está logado: o app manda o token da sessão e a API confere
+com o mesmo projeto do Supabase (a mesma `SUPABASE_URL` do app).
 
 ```bash
-PYTHONPATH=. .venv/bin/uvicorn api.main:app --reload
+SUPABASE_URL=https://SEU-PROJETO.supabase.co \
+  PYTHONPATH=. .venv/bin/uvicorn api.main:app --reload
 ```
+
+Se o projeto ainda usa o JWT secret legado (Project Settings > JWT Keys),
+passe também `SUPABASE_JWT_SECRET=...`. Pra testar a API sem login (ex.: com
+`curl`), troque o `SUPABASE_URL` por `API_SEM_AUTH=1`.
 
 ## Estrutura
 

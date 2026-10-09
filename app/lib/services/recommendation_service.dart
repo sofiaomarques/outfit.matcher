@@ -124,7 +124,10 @@ class RecommendationService {
     final response = await http
         .post(
           Uri.parse('${ApiConfig.baseUrl}/looks/recommend'),
-          headers: {'Content-Type': 'application/json'},
+          headers: {
+            'Content-Type': 'application/json',
+            ...await ApiConfig.authHeaders(),
+          },
           body: jsonEncode({
             'pecas': [
               for (final item in analyzed)

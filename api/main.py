@@ -3,9 +3,12 @@ Flutter — ate aqui o pipeline so rodava via script/CLI local. Roda com:
 
     PYTHONPATH=. .venv/bin/uvicorn api.main:app --reload
 
-A URL do serviço é configurada no Flutter via `--dart-define` (mesmo padrão
-do Supabase) — hospedagem pública fica pra decidir depois de validar o fluxo
-local.
+Em dev, sem login: `API_SEM_AUTH=1` na frente. A URL do serviço é
+configurada no Flutter via `--dart-define` (mesmo padrão do Supabase).
+
+Protecao da API publica: as rotas de foto e de looks exigem o token da sessao
+do Supabase (api/auth.py), o CORS so libera o dominio do site
+(ALLOWED_ORIGINS) e o upload tem limite de tamanho.
 """
 
 from __future__ import annotations
@@ -20,13 +23,14 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
 from PIL import Image
 from pydantic import BaseModel, Field
 
+from api.auth import autenticador_do_ambiente, usuario_logado
 from features.categoria import carregar_modelo_categoria
 from features.embedding_neural import VERSAO_FEATURES, gerar_embedding_completo
 from features.recorte import recortar_peca
@@ -50,6 +54,8 @@ def _carregar(nome: str, carregar: Callable[[], str]) -> str:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Antes dos modelos: sem configuracao de login, falha em segundos.
+    app.state.autenticador = autenticador_do_ambiente()
     # Carrega os modelos ao subir, nao na primeira requisicao: o /health so
     # responde depois disso e mostra o que de fato carregou — um .pt que
     # existe mas nao carrega aparece como "erro", nao como o modelo esperado.
@@ -62,14 +68,25 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Outfit Matcher API", lifespan=lifespan)
 
-# CORS liberado pra qualquer origem: servico ainda so roda local pra dev,
-# sem dado sensivel exposto (a foto ja chega via upload autenticado no
-# Supabase antes de bater aqui).
+# Em dev, qualquer porta do localhost (o `flutter run -d web-server` muda de
+# porta). Com ALLOWED_ORIGINS (ex.: "https://wable.exemplo.com", separadas
+# por virgula), so essas — o login (api/auth.py) e o que protege de verdade,
+# o CORS so impede outro site de usar a API pelo navegador de quem visita.
+LOCALHOST = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
+
+
+def configuracao_cors(valor: str | None) -> dict:
+    origens = [o.strip().rstrip("/") for o in (valor or "").split(",") if o.strip()]
+    if origens:
+        return {"allow_origins": origens}
+    return {"allow_origin_regex": LOCALHOST}
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    **configuracao_cors(os.environ.get("ALLOWED_ORIGINS")),
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 
@@ -97,19 +114,30 @@ def health() -> dict:
 # analises em paralelo nao terminam antes, so somam memoria.
 _pipeline_fotos = threading.Lock()
 
+# O app reduz a foto pra 1600 px (JPEG ~1-2 MB) antes de mandar; os limites
+# so barram quem chama a API direto. Pixels contam a parte: um PNG pequeno
+# pode abrir em uma imagem enorme na memoria.
+MAX_BYTES_UPLOAD = 10 * 1024 * 1024
+MAX_PIXELS_UPLOAD = 25_000_000
+
 
 def _salvar_temp(file: UploadFile) -> Path:
-    conteudo = file.file.read()
+    conteudo = file.file.read(MAX_BYTES_UPLOAD + 1)
     if not conteudo:
         raise HTTPException(status_code=400, detail="Arquivo vazio.")
+    if len(conteudo) > MAX_BYTES_UPLOAD:
+        raise HTTPException(status_code=413, detail="Foto maior que 10 MB.")
 
     # Valida pelo conteudo, nao pelo content-type: o pacote `http` do Flutter
     # manda bytes como application/octet-stream por padrao.
     try:
         with Image.open(io.BytesIO(conteudo)) as imagem:
+            largura, altura = imagem.size
             imagem.verify()
     except Exception:
         raise HTTPException(status_code=400, detail="Envie um arquivo de imagem.")
+    if largura * altura > MAX_PIXELS_UPLOAD:
+        raise HTTPException(status_code=413, detail="Foto com resolucao grande demais.")
 
     sufixo = Path(file.filename or "upload.jpg").suffix or ".jpg"
     tmp = tempfile.NamedTemporaryFile(suffix=sufixo, delete=False)
@@ -133,7 +161,7 @@ def _achatar_em_fundo_branco(caminho: Path) -> None:
     fundo.save(caminho, format="PNG")
 
 
-@app.post("/items/analyze")
+@app.post("/items/analyze", dependencies=[Depends(usuario_logado)])
 def analyze_item(file: UploadFile = File(...)) -> dict:
     """Roda o pipeline completo sobre a foto de uma peça: cor, categoria,
     tipo, estampa, formalidade e o embedding de 523 números usado pelo
@@ -163,7 +191,7 @@ def analyze_item(file: UploadFile = File(...)) -> dict:
     }
 
 
-@app.post("/items/crop")
+@app.post("/items/crop", dependencies=[Depends(usuario_logado)])
 def crop_item(file: UploadFile = File(...)) -> Response:
     """Recorta a peça de roupa da foto (remove corpo/fundo) e devolve um PNG
     com fundo transparente, pronto pra virar a miniatura no guarda-roupa —
@@ -213,7 +241,7 @@ class PedidoRecomendacao(BaseModel):
     feedback: FeedbackEntrada | None = None
 
 
-@app.post("/looks/recommend")
+@app.post("/looks/recommend", dependencies=[Depends(usuario_logado)])
 def recommend_looks(pedido: PedidoRecomendacao) -> dict:
     """Monta e ordena looks a partir do guarda-roupa enviado pelo app
     (model/recomendar.py). O app manda as pecas com features em vez de a API
