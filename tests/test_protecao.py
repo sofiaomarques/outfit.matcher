@@ -79,10 +79,33 @@ def test_token_hs256_do_projeto_legado_passa(cliente):
     assert _recomendar(cliente, _token(chave=SEGREDO_LEGADO, alg="HS256")).status_code == 200
 
 
+def test_token_emitido_com_relogio_adiantado_passa(cliente):
+    # Relogio do Supabase alguns segundos a frente do servidor da API.
+    assert _recomendar(cliente, _token(iat=int(time.time()) + 10)).status_code == 200
+
+
 def test_sem_token_da_401(cliente):
     resposta = _recomendar(cliente)
     assert resposta.status_code == 401
     assert resposta.headers["www-authenticate"] == "Bearer"
+
+
+def test_sem_token_da_401_antes_de_ler_o_corpo(cliente):
+    # Corpo invalido daria 422 se a API chegasse a ler: o login vem antes.
+    resposta = cliente.post("/looks/recommend", content=b"{nao e json", headers={"Content-Type": "application/json"})
+    assert resposta.status_code == 401
+
+
+def test_401_leva_os_cabecalhos_de_cors(cliente):
+    # Sem eles, o navegador esconde o 401 do app e mostra so "erro de rede".
+    resposta = cliente.post("/looks/recommend", json={"pecas": []}, headers={"Origin": "http://localhost:5173"})
+    assert resposta.status_code == 401
+    assert resposta.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
+@pytest.mark.parametrize("rota", ["/openapi.json", "/docs", "/rota-que-nao-existe"])
+def test_qualquer_outra_rota_exige_login(cliente, rota):
+    assert cliente.get(rota).status_code == 401
 
 
 @pytest.mark.parametrize(
@@ -187,6 +210,33 @@ def cliente_sem_login():
     app.state.autenticador = None
     yield TestClient(app)
     app.state.autenticador = antes
+
+
+def test_corpo_grande_demais_da_413_pelo_content_length(cliente_sem_login):
+    grande = b"x" * (api.main.MAX_BYTES_CORPO + 1)
+    resposta = cliente_sem_login.post("/looks/recommend", content=grande, headers={"Content-Type": "application/json"})
+    assert resposta.status_code == 413
+
+
+def test_corpo_grande_demais_da_413_sem_content_length(cliente_sem_login):
+    def pedacos():
+        for _ in range(13):
+            yield b"x" * (1024 * 1024)
+
+    # Gerador: o httpx manda chunked, sem Content-Length.
+    resposta = cliente_sem_login.post("/looks/recommend", content=pedacos(), headers={"Content-Type": "application/json"})
+    assert resposta.status_code == 413
+
+
+def test_guarda_roupa_acima_do_limite_da_422(cliente_sem_login):
+    pecas = [{"id": str(i), "categoria": "top", "features": {}} for i in range(api.main.MAX_PECAS + 1)]
+    assert cliente_sem_login.post("/looks/recommend", json={"pecas": pecas}).status_code == 422
+
+
+def test_feedback_acima_do_limite_da_422(cliente_sem_login):
+    feedback = {"favoritos": [["a", "b"]] * (api.main.MAX_FEEDBACK + 1)}
+    resposta = cliente_sem_login.post("/looks/recommend", json={"pecas": [], "feedback": feedback})
+    assert resposta.status_code == 422
 
 
 def test_upload_maior_que_o_limite_da_413(cliente_sem_login):

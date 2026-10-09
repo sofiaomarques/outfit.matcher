@@ -21,10 +21,19 @@ import logging
 import os
 
 import jwt
-from fastapi import Depends, HTTPException, Request
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import Headers
+from starlette.responses import JSONResponse, Response
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 log = logging.getLogger("uvicorn.error")
+
+# Todo o resto exige login (o padrao e fechado: rota nova ja nasce protegida).
+ROTAS_PUBLICAS = frozenset({"/health"})
+
+# Folga pra diferenca de relogio entre o Supabase e o servidor da API: sem
+# ela, um token recem-emitido (iat alguns segundos "no futuro") da 401.
+FOLGA_RELOGIO_S = 30
 
 # Algoritmos das JWT signing keys do Supabase; HS256 e o segredo legado.
 ALGORITMOS_ASSIMETRICOS = ("ES256", "RS256")
@@ -64,6 +73,7 @@ class Autenticador:
             algorithms=[alg],
             audience="authenticated",
             issuer=self.emissor,
+            leeway=FOLGA_RELOGIO_S,
             options={"require": ["exp", "sub", "aud", "iss"]},
         )
 
@@ -82,31 +92,50 @@ def autenticador_do_ambiente() -> Autenticador | None:
     return Autenticador(url, segredo=os.environ.get("SUPABASE_JWT_SECRET") or None)
 
 
-_bearer = HTTPBearer(auto_error=False)
-
-
-def usuario_logado(
-    request: Request,
-    credenciais: HTTPAuthorizationCredentials | None = Depends(_bearer),
-) -> str | None:
-    """Dependencia das rotas protegidas; devolve o id do usuario (`sub`).
-    `def`, nao async: a primeira busca das chaves publicas e uma chamada de
-    rede e roda no threadpool."""
-    autenticador: Autenticador | None = request.app.state.autenticador
-    if autenticador is None:
-        return None
-    nao_autorizado = HTTPException(
+def _usuario_ou_erro(autenticador: Autenticador, authorization: str | None) -> str | Response:
+    """Id do usuario (`sub`) ou a resposta de erro pronta."""
+    esquema, _, token = (authorization or "").partition(" ")
+    if esquema.lower() == "bearer" and token.strip():
+        try:
+            return autenticador.verificar(token.strip())["sub"]
+        except jwt.PyJWKClientConnectionError:
+            # Supabase fora do ar: o token pode ser valido, o problema e nosso.
+            log.exception("Nao consegui buscar as chaves publicas do Supabase")
+            return JSONResponse({"detail": "Nao foi possivel validar o login agora."}, status_code=503)
+        except jwt.PyJWTError:
+            pass
+    return JSONResponse(
+        {"detail": "Faca login no app."},
         status_code=401,
-        detail="Faca login no app.",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    if credenciais is None:
-        raise nao_autorizado
-    try:
-        return autenticador.verificar(credenciais.credentials)["sub"]
-    except jwt.PyJWKClientConnectionError:
-        # Supabase fora do ar: o token pode ser valido, o problema e nosso.
-        log.exception("Nao consegui buscar as chaves publicas do Supabase")
-        raise HTTPException(status_code=503, detail="Nao foi possivel validar o login agora.")
-    except jwt.PyJWTError:
-        raise nao_autorizado
+
+
+class ExigeLogin:
+    """Middleware ASGI: confere o token antes de a requisicao chegar no
+    FastAPI. Como dependencia da rota nao serviria — o FastAPI le o corpo
+    inteiro (upload, JSON) antes de resolver as dependencias, entao quem nao
+    esta logado ainda faria a API ler o que mandasse. O id do usuario fica em
+    `request.state.usuario`."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        # O tipo antes de tudo: no scope "lifespan" o autenticador ainda nao
+        # existe (e ele que cria), e um erro aqui desligaria o lifespan.
+        if scope["type"] != "http" or scope["path"] in ROTAS_PUBLICAS:
+            await self.app(scope, receive, send)
+            return
+        autenticador: Autenticador | None = scope["app"].state.autenticador
+        if autenticador is None:
+            await self.app(scope, receive, send)
+            return
+        # No threadpool: a primeira busca das chaves publicas e uma chamada de rede.
+        authorization = Headers(scope=scope).get("authorization")
+        resultado = await run_in_threadpool(_usuario_ou_erro, autenticador, authorization)
+        if isinstance(resultado, Response):
+            await resultado(scope, receive, send)
+            return
+        scope.setdefault("state", {})["usuario"] = resultado
+        await self.app(scope, receive, send)

@@ -6,9 +6,9 @@ Flutter — ate aqui o pipeline so rodava via script/CLI local. Roda com:
 Em dev, sem login: `API_SEM_AUTH=1` na frente. A URL do serviço é
 configurada no Flutter via `--dart-define` (mesmo padrão do Supabase).
 
-Protecao da API publica: as rotas de foto e de looks exigem o token da sessao
-do Supabase (api/auth.py), o CORS so libera o dominio do site
-(ALLOWED_ORIGINS) e o upload tem limite de tamanho.
+Protecao da API publica: tudo menos o /health exige o token da sessao do
+Supabase (api/auth.py), o CORS so libera o dominio do site (ALLOWED_ORIGINS)
+e o corpo das requisicoes, o upload e o guarda-roupa tem limite de tamanho.
 """
 
 from __future__ import annotations
@@ -23,14 +23,16 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
+from starlette.datastructures import Headers
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from api.auth import autenticador_do_ambiente, usuario_logado
+from api.auth import ExigeLogin, autenticador_do_ambiente
 from features.categoria import carregar_modelo_categoria
 from features.embedding_neural import VERSAO_FEATURES, gerar_embedding_completo
 from features.recorte import recortar_peca
@@ -68,6 +70,44 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Outfit Matcher API", lifespan=lifespan)
 
+# Corpo de qualquer requisicao: a foto (MAX_BYTES_UPLOAD) com folga pro
+# multipart, ou o JSON de MAX_PECAS pecas (~6 KB cada, quase tudo embedding).
+MAX_BYTES_CORPO = 12 * 1024 * 1024
+
+
+class LimiteDeCorpo:
+    """Middleware ASGI: 413 antes de ler um corpo grande demais. Pelo
+    Content-Length quando vem; sem ele (chunked), contando o que chega."""
+
+    def __init__(self, app: ASGIApp, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        tamanho = Headers(scope=scope).get("content-length", "")
+        if tamanho.isdigit() and int(tamanho) > self.max_bytes:
+            resposta = JSONResponse({"detail": "Requisicao grande demais."}, status_code=413)
+            await resposta(scope, receive, send)
+            return
+
+        recebidos = 0
+
+        async def receive_limitado():
+            nonlocal recebidos
+            mensagem = await receive()
+            if mensagem["type"] == "http.request":
+                recebidos += len(mensagem.get("body", b""))
+                if recebidos > self.max_bytes:
+                    # O FastAPI repassa HTTPException da leitura do corpo.
+                    raise HTTPException(status_code=413, detail="Requisicao grande demais.")
+            return mensagem
+
+        await self.app(scope, receive_limitado, send)
+
+
 # Em dev, qualquer porta do localhost (o `flutter run -d web-server` muda de
 # porta). Com ALLOWED_ORIGINS (ex.: "https://wable.exemplo.com", separadas
 # por virgula), so essas — o login (api/auth.py) e o que protege de verdade,
@@ -82,6 +122,11 @@ def configuracao_cors(valor: str | None) -> dict:
     return {"allow_origin_regex": LOCALHOST}
 
 
+# O ultimo adicionado e o mais externo: CORS por fora, pra que 401 e 413
+# tambem levem os cabecalhos e o app no navegador consiga ler o erro. O
+# login vem antes do limite de corpo: sem token, nem o tamanho e olhado.
+app.add_middleware(LimiteDeCorpo, max_bytes=MAX_BYTES_CORPO)
+app.add_middleware(ExigeLogin)
 app.add_middleware(
     CORSMiddleware,
     **configuracao_cors(os.environ.get("ALLOWED_ORIGINS")),
@@ -161,7 +206,7 @@ def _achatar_em_fundo_branco(caminho: Path) -> None:
     fundo.save(caminho, format="PNG")
 
 
-@app.post("/items/analyze", dependencies=[Depends(usuario_logado)])
+@app.post("/items/analyze")
 def analyze_item(file: UploadFile = File(...)) -> dict:
     """Roda o pipeline completo sobre a foto de uma peça: cor, categoria,
     tipo, estampa, formalidade e o embedding de 523 números usado pelo
@@ -191,7 +236,7 @@ def analyze_item(file: UploadFile = File(...)) -> dict:
     }
 
 
-@app.post("/items/crop", dependencies=[Depends(usuario_logado)])
+@app.post("/items/crop")
 def crop_item(file: UploadFile = File(...)) -> Response:
     """Recorta a peça de roupa da foto (remove corpo/fundo) e devolve um PNG
     com fundo transparente, pronto pra virar a miniatura no guarda-roupa —
@@ -225,14 +270,20 @@ class UsoEntrada(BaseModel):
     dias: int = Field(ge=0)  # dias desde o uso
 
 
+# O custo do recomendador cresce mais que linear com o guarda-roupa
+# (combinacoes cima x baixo x camada): 300 pecas levam ~4 s, 500 ja ~16 s.
+MAX_PECAS = 300
+MAX_FEEDBACK = 1000
+
+
 class FeedbackEntrada(BaseModel):
-    favoritos: list[list[str]] = []
-    rejeitados: list[RejeicaoEntrada] = []
-    usos: list[UsoEntrada] = []
+    favoritos: list[list[str]] = Field(default=[], max_length=MAX_FEEDBACK)
+    rejeitados: list[RejeicaoEntrada] = Field(default=[], max_length=MAX_FEEDBACK)
+    usos: list[UsoEntrada] = Field(default=[], max_length=MAX_FEEDBACK)
 
 
 class PedidoRecomendacao(BaseModel):
-    pecas: list[PecaGuardaRoupa]
+    pecas: list[PecaGuardaRoupa] = Field(max_length=MAX_PECAS)
     ocasiao: Literal[tuple(OCASIOES)] | None = None  # type: ignore[valid-type]
     clima: Literal[tuple(CLIMAS)] | None = None  # type: ignore[valid-type]
     top_k: int = Field(default=12, ge=1, le=50)
@@ -241,7 +292,7 @@ class PedidoRecomendacao(BaseModel):
     feedback: FeedbackEntrada | None = None
 
 
-@app.post("/looks/recommend", dependencies=[Depends(usuario_logado)])
+@app.post("/looks/recommend")
 def recommend_looks(pedido: PedidoRecomendacao) -> dict:
     """Monta e ordena looks a partir do guarda-roupa enviado pelo app
     (model/recomendar.py). O app manda as pecas com features em vez de a API

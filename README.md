@@ -305,9 +305,11 @@ SUPABASE_URL=https://SEU-PROJETO.supabase.co PYTHONPATH=. .venv/bin/uvicorn api.
 | `POST /items/analyze` | cor, categoria, estampa, formalidade e embedding de 523 números |
 | `POST /looks/recommend` | recebe as peças com features + ocasião/clima e devolve os looks |
 
-A API é pública, então as três rotas `POST` exigem
+A API é pública, então tudo menos o `/health` exige
 `Authorization: Bearer <access token da sessão do Supabase>` (o app manda
-sozinho) e respondem 401 sem ele. Fotos acima de 10 MB ou 25 megapixels dão 413.
+sozinho) e responde 401 sem ele, antes de ler o corpo da requisição. Limites:
+corpo de até 12 MB e foto de até 10 MB / 25 megapixels (413), e até 300 peças
+por `/looks/recommend` (422).
 
 | Variável | Pra quê |
 |---|---|
