@@ -300,7 +300,7 @@ SUPABASE_URL=https://SEU-PROJETO.supabase.co PYTHONPATH=. .venv/bin/uvicorn api.
 
 | Endpoint | O que faz |
 |---|---|
-| `GET /health` | `versao_features`, revisão dos pesos e quais modelos carregaram (em produção: match `v2`, categoria `clip_ajustado`; senão `status: "degradado"`). Aberto, sem login |
+| `GET /health` | `versao_features`, revisão dos pesos e quais modelos carregaram (em produção: match `v2`, categoria `clip_ajustado`) e se o login está ligado; senão `status: "degradado"`. Aberto, sem login |
 | `POST /items/crop` | recorta a peça da foto (PNG transparente) |
 | `POST /items/analyze` | cor, categoria, estampa, formalidade e embedding de 523 números |
 | `POST /looks/recommend` | recebe as peças com features + ocasião/clima e devolve os looks |

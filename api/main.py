@@ -141,10 +141,14 @@ def health() -> dict:
     carrega, a API sobe mesmo assim (com um modelo pior, ou dando erro so na
     rota que usa ele) e o status vira "degradado" — sempre com 200, porque o
     app continua funcionando. `revisao_modelos` e o commit do Hub de onde os
-    pesos vieram (so na imagem Docker)."""
+    pesos vieram (so na imagem Docker). Com o login desligado
+    (API_SEM_AUTH=1) tambem fica "degradado": em producao, a API estaria
+    aberta pra qualquer um sem mais nenhum sinal alem do log."""
     modelos = app.state.modelos
+    login = app.state.autenticador is not None
     return {
-        "status": "ok" if modelos == MODELOS_ESPERADOS else "degradado",
+        "status": "ok" if modelos == MODELOS_ESPERADOS and login else "degradado",
+        "login": login,
         "versao_features": VERSAO_FEATURES,
         "revisao_modelos": os.environ.get("MODELOS_REVISAO"),
         "modelos": modelos,
@@ -179,6 +183,9 @@ def _salvar_temp(file: UploadFile) -> Path:
         with Image.open(io.BytesIO(conteudo)) as imagem:
             largura, altura = imagem.size
             imagem.verify()
+    except Image.DecompressionBombError:
+        # O Pillow recusa na abertura acima de ~179 MP, antes da conta abaixo.
+        raise HTTPException(status_code=413, detail="Foto com resolucao grande demais.")
     except Exception:
         raise HTTPException(status_code=400, detail="Envie um arquivo de imagem.")
     if largura * altura > MAX_PIXELS_UPLOAD:

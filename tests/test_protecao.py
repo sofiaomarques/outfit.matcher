@@ -56,13 +56,16 @@ def _token(chave=CHAVE, alg="ES256", kid="chave-1", **claims) -> str:
 
 
 @pytest.fixture
-def cliente():
+def cliente(monkeypatch):
     """Sem `with`: nao roda o lifespan (nao carrega os modelos), entao o
-    autenticador entra direto no app.state."""
-    antes = getattr(app.state, "autenticador", None)
-    app.state.autenticador = Autenticador(SUPABASE_URL, segredo=SEGREDO_LEGADO, jwks=JwksFalso())
-    yield TestClient(app)
-    app.state.autenticador = antes
+    autenticador entra direto no app.state — e o monkeypatch devolve o de
+    antes no fim, pros outros testes que dividem o mesmo app."""
+    _trocar_autenticador(monkeypatch, Autenticador(SUPABASE_URL, segredo=SEGREDO_LEGADO, jwks=JwksFalso()))
+    return TestClient(app)
+
+
+def _trocar_autenticador(monkeypatch, autenticador: Autenticador | None) -> None:
+    monkeypatch.setattr(app.state, "autenticador", autenticador, raising=False)
 
 
 def _recomendar(cliente: TestClient, token: str | None = None):
@@ -129,13 +132,13 @@ def test_token_invalido_da_401(cliente, token):
     assert _recomendar(cliente, token).status_code == 401
 
 
-def test_hs256_sem_segredo_configurado_da_401(cliente):
-    app.state.autenticador = Autenticador(SUPABASE_URL, jwks=JwksFalso())
+def test_hs256_sem_segredo_configurado_da_401(cliente, monkeypatch):
+    _trocar_autenticador(monkeypatch, Autenticador(SUPABASE_URL, jwks=JwksFalso()))
     assert _recomendar(cliente, _token(chave=SEGREDO_LEGADO, alg="HS256")).status_code == 401
 
 
-def test_supabase_fora_do_ar_da_503(cliente):
-    app.state.autenticador = Autenticador(SUPABASE_URL, jwks=JwksFalso(fora_do_ar=True))
+def test_supabase_fora_do_ar_da_503(cliente, monkeypatch):
+    _trocar_autenticador(monkeypatch, Autenticador(SUPABASE_URL, jwks=JwksFalso(fora_do_ar=True)))
     assert _recomendar(cliente, _token()).status_code == 503
 
 
@@ -145,9 +148,9 @@ def test_rotas_de_foto_exigem_login(cliente, rota):
     assert resposta.status_code == 401
 
 
-def test_health_continua_aberto(cliente):
+def test_health_continua_aberto(cliente, monkeypatch):
     # Sem modelos carregados (sem lifespan), mas responde sem token.
-    app.state.modelos = {}
+    monkeypatch.setattr(app.state, "modelos", {}, raising=False)
     assert cliente.get("/health").status_code == 200
 
 
@@ -205,11 +208,9 @@ def test_cors_em_producao_so_libera_o_site():
 
 
 @pytest.fixture
-def cliente_sem_login():
-    antes = getattr(app.state, "autenticador", None)
-    app.state.autenticador = None
-    yield TestClient(app)
-    app.state.autenticador = antes
+def cliente_sem_login(monkeypatch):
+    _trocar_autenticador(monkeypatch, None)
+    return TestClient(app)
 
 
 def test_corpo_grande_demais_da_413_pelo_content_length(cliente_sem_login):
@@ -250,5 +251,14 @@ def test_imagem_com_pixels_demais_da_413(cliente_sem_login):
     buffer = io.BytesIO()
     Image.new("1", (6000, 5000)).save(buffer, format="PNG")
     assert len(buffer.getvalue()) < api.main.MAX_BYTES_UPLOAD
+    resposta = cliente_sem_login.post("/items/crop", files={"file": ("x.png", buffer.getvalue(), "image/png")})
+    assert resposta.status_code == 413
+
+
+def test_imagem_acima_do_limite_do_pillow_da_413(cliente_sem_login):
+    # ~225 MP: o Pillow recusa ja na abertura (DecompressionBombError), antes
+    # da conta de pixels — tem que dar o mesmo 413, nao "nao e imagem".
+    buffer = io.BytesIO()
+    Image.new("1", (15000, 15000)).save(buffer, format="PNG")
     resposta = cliente_sem_login.post("/items/crop", files={"file": ("x.png", buffer.getvalue(), "image/png")})
     assert resposta.status_code == 413
