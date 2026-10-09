@@ -8,6 +8,7 @@ import 'screens/new_look_screen.dart';
 import 'screens/placeholder_screen.dart';
 import 'screens/wardrobe_screen.dart';
 import 'screens/wishlist_screen.dart';
+import 'services/api_status.dart';
 import 'services/supabase_config.dart';
 import 'theme/app_theme.dart';
 import 'widgets/app_shell.dart';
@@ -78,6 +79,7 @@ class _RootNavigator extends StatefulWidget {
 
 class _RootNavigatorState extends State<_RootNavigator> {
   int _selectedIndex = 0;
+  String? _apiWokenFor;
 
   static const _screens = [
     WardrobeScreen(),
@@ -96,6 +98,12 @@ class _RootNavigatorState extends State<_RootNavigator> {
         final session = Supabase.instance.client.auth.currentSession;
         if (session == null) {
           return const AuthScreen();
+        }
+        if (_apiWokenFor != session.user.id) {
+          _apiWokenFor = session.user.id;
+          // Começa a acordar a API já no login, enquanto a pessoa ainda olha
+          // o guarda-roupa; as telas que usam a API esperam por ela.
+          ApiStatus.instance.ensureReady().ignore();
         }
 
         return AppShell(

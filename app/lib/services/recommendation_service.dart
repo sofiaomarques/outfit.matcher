@@ -6,6 +6,7 @@ import '../models/clothing_item.dart';
 import '../models/outfit.dart';
 import '../repositories/wardrobe_repository.dart';
 import 'api_config.dart';
+import 'api_status.dart';
 import 'garment_analysis_service.dart';
 import 'outfit_history.dart';
 
@@ -31,15 +32,19 @@ const Map<String, String> weatherKeys = {
 /// da API Python (`model/recomendar.py`): compatibilidade entre as peças
 /// (modelo treinado) + ocasião + clima + feedback da usuária (favoritos,
 /// rejeições e usos do [OutfitHistory]), com variedade entre os looks.
+/// Sem API (fora do ar, sem internet, não acordou), lança [ApiException].
 class RecommendationService {
   RecommendationService(
     this._repository, {
     GarmentAnalysisService? analysisService,
     OutfitHistory? history,
+    ApiStatus? apiStatus,
   }) : _analysisService = analysisService ?? GarmentAnalysisService(),
-       _history = history ?? OutfitHistory.instance;
+       _history = history ?? OutfitHistory.instance,
+       _api = apiStatus ?? ApiStatus.instance;
 
   final WardrobeRepository _repository;
+  final ApiStatus _api;
   final GarmentAnalysisService _analysisService;
   final OutfitHistory _history;
 
@@ -89,6 +94,9 @@ class RecommendationService {
         .toList();
     if (missing.isEmpty) return items;
 
+    // Sem a API não há o que analisar: falha uma vez só, com o motivo, em
+    // vez de esperar ela acordar peça por peça.
+    await _api.ensureReady();
     final analyzed = <String, ClothingItem>{};
     for (final (index, item) in missing.indexed) {
       _notifyProgress(index, missing.length);
@@ -98,6 +106,9 @@ class RecommendationService {
         final swatch = swatchFromFeatures(features);
         await _repository.updateFeatures(item, features, swatch: swatch);
         analyzed[item.id] = item.copyWith(swatch: swatch, features: features);
+      } on ApiException {
+        // A API caiu no meio: para aqui e fica com o que já foi analisado.
+        break;
       } catch (_) {
         // Segue sem essa peça; tenta de novo na próxima vez que a tela abrir.
       }
@@ -121,29 +132,31 @@ class RecommendationService {
       return [];
     }
 
-    final response = await http
-        .post(
-          Uri.parse('${ApiConfig.baseUrl}/looks/recommend'),
-          headers: {
-            'Content-Type': 'application/json',
-            ...await ApiConfig.authHeaders(),
-          },
-          body: jsonEncode({
-            'pecas': [
-              for (final item in analyzed)
-                {
-                  'id': item.id,
-                  'categoria': item.category.name,
-                  'features': item.features,
-                },
-            ],
-            'ocasiao': occasionKeys[occasion],
-            'clima': weatherKeys[weather],
-            'top_k': topK,
-            'feedback': await _feedbackPayload(),
-          }),
-        )
-        .timeout(const Duration(seconds: 30));
+    final response = await _api.send(
+      () async => http
+          .post(
+            Uri.parse('${ApiConfig.baseUrl}/looks/recommend'),
+            headers: {
+              'Content-Type': 'application/json',
+              ...await ApiConfig.authHeaders(),
+            },
+            body: jsonEncode({
+              'pecas': [
+                for (final item in analyzed)
+                  {
+                    'id': item.id,
+                    'categoria': item.category.name,
+                    'features': item.features,
+                  },
+              ],
+              'ocasiao': occasionKeys[occasion],
+              'clima': weatherKeys[weather],
+              'top_k': topK,
+              'feedback': await _feedbackPayload(),
+            }),
+          )
+          .timeout(const Duration(seconds: 30)),
+    );
     if (response.statusCode != 200) {
       throw Exception('Falha ao gerar looks (${response.statusCode})');
     }
@@ -189,8 +202,8 @@ class RecommendationService {
   }
 }
 
-/// Existem peças no guarda-roupa, mas nenhuma pôde ser analisada (API de
-/// análise fora do ar): diferente de um guarda-roupa vazio.
+/// Existem peças no guarda-roupa, mas nenhuma pôde ser analisada: diferente
+/// de um guarda-roupa vazio.
 class NoAnalyzedItemsException implements Exception {
   const NoAnalyzedItemsException();
 }
