@@ -6,6 +6,7 @@ import 'dart:ui';
 import 'package:http/http.dart' as http;
 
 import 'api_config.dart';
+import 'api_status.dart';
 
 /// Cor principal extraída pela API (`cor_principal`, RGB), pra usar como
 /// swatch da peça. Nula se a peça não foi analisada.
@@ -23,7 +24,14 @@ Color? swatchFromFeatures(Map<String, dynamic>? features) {
 /// Cliente da API Python que roda o pipeline de `features/*.py`
 /// (`api/main.py`): recorta a peça da foto e extrai as features (cor,
 /// categoria, estampa, formalidade e o embedding usado pelo recomendador).
+/// Cada chamada espera a API acordar ([ApiStatus.send]); sem API, lança
+/// [ApiException].
 class GarmentAnalysisService {
+  GarmentAnalysisService({ApiStatus? apiStatus})
+    : _api = apiStatus ?? ApiStatus.instance;
+
+  final ApiStatus _api;
+
   /// Roda o pipeline completo sobre a foto (`/items/analyze`) e devolve o
   /// JSON cru, que vai direto pra coluna `features` de `clothing_items`.
   /// Mais lento que o recorte (CLIP + segmentação): pode levar vários
@@ -38,8 +46,8 @@ class GarmentAnalysisService {
       http.MultipartFile.fromBytes('file', imageBytes, filename: 'foto.jpg'),
     );
 
-    final streamedResponse = await request.send().timeout(
-      const Duration(seconds: 90),
+    final streamedResponse = await _api.send(
+      () => request.send().timeout(const Duration(seconds: 90)),
     );
     if (streamedResponse.statusCode != 200) {
       throw Exception(
@@ -63,8 +71,8 @@ class GarmentAnalysisService {
       http.MultipartFile.fromBytes('file', imageBytes, filename: 'foto.jpg'),
     );
 
-    final streamedResponse = await request.send().timeout(
-      const Duration(seconds: 30),
+    final streamedResponse = await _api.send(
+      () => request.send().timeout(const Duration(seconds: 30)),
     );
     if (streamedResponse.statusCode != 200) {
       throw Exception(

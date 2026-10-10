@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -5,14 +6,19 @@ import 'package:image_picker/image_picker.dart';
 
 import '../models/clothing_category.dart';
 import '../repositories/wardrobe_repository.dart';
+import '../services/api_status.dart';
 import '../services/garment_analysis_service.dart';
 import '../theme/app_colors.dart';
+
+typedef _Analysis = ({Map<String, dynamic>? features, bool skipped});
 
 /// Tela de cadastro de uma peça nova: escolhe a foto (câmera ou galeria),
 /// preenche nome e categoria, e salva no guarda-roupa. Assim que a foto é
 /// escolhida, a API Python recorta a peça e, em paralelo, extrai as
 /// features (cor real, formalidade, embedding) que o recomendador de looks
-/// usa. A categoria continua sendo a que o usuário escolhe.
+/// usa. A categoria continua sendo a que o usuário escolhe. Com a API
+/// acordando (cold start), dá pra salvar sem esperar: a peça vai sem recorte
+/// e sem features, e é analisada depois em `RecommendationService.loadWardrobe`.
 class AddItemScreen extends StatefulWidget {
   const AddItemScreen({super.key, required this.repository});
 
@@ -38,10 +44,19 @@ class _AddItemScreenState extends State<AddItemScreen> {
   String? _errorText;
 
   @override
+  void initState() {
+    super.initState();
+    ApiStatus.instance.addListener(_onApiChange);
+  }
+
+  @override
   void dispose() {
+    ApiStatus.instance.removeListener(_onApiChange);
     _nameController.dispose();
     super.dispose();
   }
+
+  void _onApiChange() => setState(() {});
 
   Future<void> _pickImage(ImageSource source) async {
     final picked = await ImagePicker().pickImage(
@@ -73,6 +88,29 @@ class _AddItemScreenState extends State<AddItemScreen> {
       return await _analysisService.analisarPeca(bytes);
     } catch (_) {
       return null;
+    }
+  }
+
+  /// Features da análise, ou nulo sem esperar se a API estiver acordando
+  /// (agora ou durante a espera): aí a análise pode levar minutos.
+  Future<_Analysis> _featuresOrSkip() async {
+    final api = ApiStatus.instance;
+    final done = Completer<_Analysis>();
+    void finish(_Analysis analysis) {
+      if (!done.isCompleted) done.complete(analysis);
+    }
+
+    void onApiChange() {
+      if (api.isWaking) finish((features: null, skipped: true));
+    }
+
+    onApiChange();
+    api.addListener(onApiChange);
+    _analysis!.then((features) => finish((features: features, skipped: false)));
+    try {
+      return await done.future;
+    } finally {
+      api.removeListener(onApiChange);
     }
   }
 
@@ -135,7 +173,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
 
     try {
       setState(() => _isAnalyzing = true);
-      final features = await _analysis;
+      final (:features, :skipped) = await _featuresOrSkip();
       if (mounted) setState(() => _isAnalyzing = false);
 
       await widget.repository.addItem(
@@ -145,7 +183,18 @@ class _AddItemScreenState extends State<AddItemScreen> {
         swatch: swatchFromFeatures(features) ?? AppColors.pink,
         features: features,
       );
-      if (mounted) Navigator.of(context).pop(true);
+      if (!mounted) return;
+      if (skipped) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Peça salva! O servidor ainda está acordando, então ela é '
+              'analisada depois.',
+            ),
+          ),
+        );
+      }
+      Navigator.of(context).pop(true);
     } catch (_) {
       setState(() => _errorText = 'Não foi possível salvar. Tente de novo.');
     } finally {
@@ -160,6 +209,8 @@ class _AddItemScreenState extends State<AddItemScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Acordando, o recorte pode levar minutos: não trava o "Salvar".
+    final waking = ApiStatus.instance.isWaking;
     return Scaffold(
       appBar: AppBar(title: const Text('Nova peça')),
       body: SingleChildScrollView(
@@ -201,17 +252,21 @@ class _AddItemScreenState extends State<AddItemScreen> {
                             if (_isCropping)
                               ColoredBox(
                                 color: Colors.black.withValues(alpha: 0.35),
-                                child: const Center(
+                                child: Center(
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      CircularProgressIndicator(
+                                      const CircularProgressIndicator(
                                         color: Colors.white,
                                       ),
-                                      SizedBox(height: 12),
+                                      const SizedBox(height: 12),
                                       Text(
-                                        'Recortando a peça...',
-                                        style: TextStyle(color: Colors.white),
+                                        waking
+                                            ? 'Acordando o servidor...'
+                                            : 'Recortando a peça...',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -222,6 +277,16 @@ class _AddItemScreenState extends State<AddItemScreen> {
                 ),
               ),
             ),
+            if (waking && _imageBytes != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                'O servidor está acordando (pode levar até 2 minutos). Se '
+                'não quiser esperar, pode salvar: a peça fica sem recorte e '
+                'é analisada depois.',
+                style: Theme.of(context).textTheme.bodyMedium
+                    ?.copyWith(color: AppColors.textMuted),
+              ),
+            ],
             const SizedBox(height: 20),
             TextField(
               controller: _nameController,
@@ -246,7 +311,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
             ],
             const SizedBox(height: 24),
             ElevatedButton(
-              onPressed: (_isSaving || _isCropping) ? null : _save,
+              onPressed: (_isSaving || (_isCropping && !waking)) ? null : _save,
               child: _isAnalyzing
                   ? const Text('Analisando a peça...')
                   : _isSaving

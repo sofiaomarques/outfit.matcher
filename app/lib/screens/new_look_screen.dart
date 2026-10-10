@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/clothing_item.dart';
 import '../models/outfit.dart';
 import '../repositories/wardrobe_repository.dart';
+import '../services/api_status.dart';
 import '../services/current_user.dart';
 import '../services/outfit_history.dart';
 import '../services/recommendation_service.dart';
@@ -68,10 +69,12 @@ class _NewLookScreenState extends State<NewLookScreen> {
         _isLoading = false;
       });
       if (_selectedOccasion != null) _recommend();
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
       setState(() {
-        _errorText = 'Não foi possível carregar seu guarda-roupa.';
+        _errorText = error is ApiException
+            ? error.message
+            : 'Não foi possível carregar seu guarda-roupa.';
         _isLoading = false;
       });
     }
@@ -102,10 +105,12 @@ class _NewLookScreenState extends State<NewLookScreen> {
     } catch (error) {
       if (!mounted || requestId != _requestId) return;
       setState(() {
-        _errorText = error is NoAnalyzedItemsException
-            ? 'Não foi possível analisar suas peças. '
-                  'Confira se a API está rodando.'
-            : 'Não foi possível gerar o look. Confira se a API está rodando.';
+        _errorText = switch (error) {
+          ApiException() => error.message,
+          NoAnalyzedItemsException() =>
+            'Não foi possível analisar suas peças. Tente de novo em instantes.',
+          _ => 'Não foi possível gerar o look. Tente de novo.',
+        };
         _isLoading = false;
       });
     }
@@ -190,7 +195,15 @@ class _NewLookScreenState extends State<NewLookScreen> {
 
   Widget _buildSuggestion() {
     if (_isLoading) {
-      return LooksStatus(message: _loadingText, isLoading: true);
+      return ListenableBuilder(
+        listenable: ApiStatus.instance,
+        builder: (context, _) => LooksStatus(
+          message: ApiStatus.instance.isWaking
+              ? ApiStatus.wakingMessage
+              : _loadingText,
+          isLoading: true,
+        ),
+      );
     }
     if (_errorText != null) {
       return LooksStatus(
