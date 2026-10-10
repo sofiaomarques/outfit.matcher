@@ -3,9 +3,12 @@ Flutter — ate aqui o pipeline so rodava via script/CLI local. Roda com:
 
     PYTHONPATH=. .venv/bin/uvicorn api.main:app --reload
 
-A URL do serviço é configurada no Flutter via `--dart-define` (mesmo padrão
-do Supabase) — hospedagem pública fica pra decidir depois de validar o fluxo
-local.
+Em dev, sem login: `API_SEM_AUTH=1` na frente. A URL do serviço é
+configurada no Flutter via `--dart-define` (mesmo padrão do Supabase).
+
+Protecao da API publica: tudo menos o /health exige o token da sessao do
+Supabase (api/auth.py), o CORS so libera o dominio do site (ALLOWED_ORIGINS)
+e o corpo das requisicoes, o upload e o guarda-roupa tem limite de tamanho.
 """
 
 from __future__ import annotations
@@ -22,11 +25,14 @@ from typing import Any, Literal
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
+from starlette.datastructures import Headers
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from PIL import Image
 from pydantic import BaseModel, Field
 
+from api.auth import ExigeLogin, autenticador_do_ambiente
 from features.categoria import carregar_modelo_categoria
 from features.embedding_neural import VERSAO_FEATURES, gerar_embedding_completo
 from features.recorte import recortar_peca
@@ -50,6 +56,8 @@ def _carregar(nome: str, carregar: Callable[[], str]) -> str:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Antes dos modelos: sem configuracao de login, falha em segundos.
+    app.state.autenticador = autenticador_do_ambiente()
     # Carrega os modelos ao subir, nao na primeira requisicao: o /health so
     # responde depois disso e mostra o que de fato carregou — um .pt que
     # existe mas nao carrega aparece como "erro", nao como o modelo esperado.
@@ -62,14 +70,68 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Outfit Matcher API", lifespan=lifespan)
 
-# CORS liberado pra qualquer origem: servico ainda so roda local pra dev,
-# sem dado sensivel exposto (a foto ja chega via upload autenticado no
-# Supabase antes de bater aqui).
+# Corpo de qualquer requisicao: a foto (MAX_BYTES_UPLOAD) com folga pro
+# multipart, ou o JSON de MAX_PECAS pecas (~6 KB cada, quase tudo embedding).
+MAX_BYTES_CORPO = 12 * 1024 * 1024
+
+
+class LimiteDeCorpo:
+    """Middleware ASGI: 413 antes de ler um corpo grande demais. Pelo
+    Content-Length quando vem; sem ele (chunked), contando o que chega."""
+
+    def __init__(self, app: ASGIApp, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        tamanho = Headers(scope=scope).get("content-length", "")
+        if tamanho.isdigit() and int(tamanho) > self.max_bytes:
+            resposta = JSONResponse({"detail": "Requisicao grande demais."}, status_code=413)
+            await resposta(scope, receive, send)
+            return
+
+        recebidos = 0
+
+        async def receive_limitado():
+            nonlocal recebidos
+            mensagem = await receive()
+            if mensagem["type"] == "http.request":
+                recebidos += len(mensagem.get("body", b""))
+                if recebidos > self.max_bytes:
+                    # O FastAPI repassa HTTPException da leitura do corpo.
+                    raise HTTPException(status_code=413, detail="Requisicao grande demais.")
+            return mensagem
+
+        await self.app(scope, receive_limitado, send)
+
+
+# Em dev, qualquer porta do localhost (o `flutter run -d web-server` muda de
+# porta). Com ALLOWED_ORIGINS (ex.: "https://wable.exemplo.com", separadas
+# por virgula), so essas — o login (api/auth.py) e o que protege de verdade,
+# o CORS so impede outro site de usar a API pelo navegador de quem visita.
+LOCALHOST = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
+
+
+def configuracao_cors(valor: str | None) -> dict:
+    origens = [o.strip().rstrip("/") for o in (valor or "").split(",") if o.strip()]
+    if origens:
+        return {"allow_origins": origens}
+    return {"allow_origin_regex": LOCALHOST}
+
+
+# O ultimo adicionado e o mais externo: CORS por fora, pra que 401 e 413
+# tambem levem os cabecalhos e o app no navegador consiga ler o erro. O
+# login vem antes do limite de corpo: sem token, nem o tamanho e olhado.
+app.add_middleware(LimiteDeCorpo, max_bytes=MAX_BYTES_CORPO)
+app.add_middleware(ExigeLogin)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    **configuracao_cors(os.environ.get("ALLOWED_ORIGINS")),
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 
@@ -79,10 +141,14 @@ def health() -> dict:
     carrega, a API sobe mesmo assim (com um modelo pior, ou dando erro so na
     rota que usa ele) e o status vira "degradado" — sempre com 200, porque o
     app continua funcionando. `revisao_modelos` e o commit do Hub de onde os
-    pesos vieram (so na imagem Docker)."""
+    pesos vieram (so na imagem Docker). Com o login desligado
+    (API_SEM_AUTH=1) tambem fica "degradado": em producao, a API estaria
+    aberta pra qualquer um sem mais nenhum sinal alem do log."""
     modelos = app.state.modelos
+    login = app.state.autenticador is not None
     return {
-        "status": "ok" if modelos == MODELOS_ESPERADOS else "degradado",
+        "status": "ok" if modelos == MODELOS_ESPERADOS and login else "degradado",
+        "login": login,
         "versao_features": VERSAO_FEATURES,
         "revisao_modelos": os.environ.get("MODELOS_REVISAO"),
         "modelos": modelos,
@@ -97,19 +163,33 @@ def health() -> dict:
 # analises em paralelo nao terminam antes, so somam memoria.
 _pipeline_fotos = threading.Lock()
 
+# O app reduz a foto pra 1600 px (JPEG ~1-2 MB) antes de mandar; os limites
+# so barram quem chama a API direto. Pixels contam a parte: um PNG pequeno
+# pode abrir em uma imagem enorme na memoria.
+MAX_BYTES_UPLOAD = 10 * 1024 * 1024
+MAX_PIXELS_UPLOAD = 25_000_000
+
 
 def _salvar_temp(file: UploadFile) -> Path:
-    conteudo = file.file.read()
+    conteudo = file.file.read(MAX_BYTES_UPLOAD + 1)
     if not conteudo:
         raise HTTPException(status_code=400, detail="Arquivo vazio.")
+    if len(conteudo) > MAX_BYTES_UPLOAD:
+        raise HTTPException(status_code=413, detail="Foto maior que 10 MB.")
 
     # Valida pelo conteudo, nao pelo content-type: o pacote `http` do Flutter
     # manda bytes como application/octet-stream por padrao.
     try:
         with Image.open(io.BytesIO(conteudo)) as imagem:
+            largura, altura = imagem.size
             imagem.verify()
+    except Image.DecompressionBombError:
+        # O Pillow recusa na abertura acima de ~179 MP, antes da conta abaixo.
+        raise HTTPException(status_code=413, detail="Foto com resolucao grande demais.")
     except Exception:
         raise HTTPException(status_code=400, detail="Envie um arquivo de imagem.")
+    if largura * altura > MAX_PIXELS_UPLOAD:
+        raise HTTPException(status_code=413, detail="Foto com resolucao grande demais.")
 
     sufixo = Path(file.filename or "upload.jpg").suffix or ".jpg"
     tmp = tempfile.NamedTemporaryFile(suffix=sufixo, delete=False)
@@ -197,14 +277,20 @@ class UsoEntrada(BaseModel):
     dias: int = Field(ge=0)  # dias desde o uso
 
 
+# O custo do recomendador cresce mais que linear com o guarda-roupa
+# (combinacoes cima x baixo x camada): 300 pecas levam ~4 s, 500 ja ~16 s.
+MAX_PECAS = 300
+MAX_FEEDBACK = 1000
+
+
 class FeedbackEntrada(BaseModel):
-    favoritos: list[list[str]] = []
-    rejeitados: list[RejeicaoEntrada] = []
-    usos: list[UsoEntrada] = []
+    favoritos: list[list[str]] = Field(default=[], max_length=MAX_FEEDBACK)
+    rejeitados: list[RejeicaoEntrada] = Field(default=[], max_length=MAX_FEEDBACK)
+    usos: list[UsoEntrada] = Field(default=[], max_length=MAX_FEEDBACK)
 
 
 class PedidoRecomendacao(BaseModel):
-    pecas: list[PecaGuardaRoupa]
+    pecas: list[PecaGuardaRoupa] = Field(max_length=MAX_PECAS)
     ocasiao: Literal[tuple(OCASIOES)] | None = None  # type: ignore[valid-type]
     clima: Literal[tuple(CLIMAS)] | None = None  # type: ignore[valid-type]
     top_k: int = Field(default=12, ge=1, le=50)

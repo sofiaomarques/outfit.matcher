@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
+from api.auth import Autenticador
 from api.main import app
 from features.embedding_neural import VERSAO_FEATURES
 import api.main
@@ -66,7 +67,9 @@ def _checar_looks(looks: list[dict], pecas: list[dict]) -> None:
             assert len(tops) == 1 or camadas, f"dois tops sem camada: {ids}"
 
 
-def test_health_mostra_os_modelos_de_producao(cliente):
+def test_health_mostra_os_modelos_de_producao(cliente, monkeypatch):
+    # Como em producao: com login (o conftest desliga pros outros testes).
+    monkeypatch.setattr(app.state, "autenticador", Autenticador("https://projeto-teste.supabase.co"))
     resposta = cliente.get("/health")
     assert resposta.status_code == 200
     corpo = resposta.json()
@@ -75,7 +78,15 @@ def test_health_mostra_os_modelos_de_producao(cliente):
     assert corpo["modelos"] == {"match": "v2", "categoria": "clip_ajustado"}, (
         "API caiu num modelo pior: rode scripts/baixar_modelos.py"
     )
+    assert corpo["login"] is True
     assert corpo["status"] == "ok"
+
+
+def test_health_degradado_com_o_login_desligado(cliente):
+    # O conftest liga API_SEM_AUTH=1; em producao isso deixaria a API aberta.
+    corpo = cliente.get("/health").json()
+    assert corpo["login"] is False
+    assert corpo["status"] == "degradado"
 
 
 def test_health_degradado_quando_um_peso_nao_carrega(monkeypatch):

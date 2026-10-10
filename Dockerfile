@@ -11,7 +11,10 @@
 # Run — a porta vem de $PORT (padrao 7860, a que o Hugging Face Spaces espera);
 # mapeada pra 8000, que e onde o app procura a API em dev:
 #
-#   docker run --rm -p 8000:7860 outfit-api
+#   docker run --rm -p 8000:7860 -e SUPABASE_URL=https://<projeto>.supabase.co outfit-api
+#
+# Sem SUPABASE_URL (ou API_SEM_AUTH=1) a API nao sobe; ALLOWED_ORIGINS com o
+# dominio do site (README, secao API).
 #
 # Tudo que a API baixaria na primeira requisicao (pesos .pt, CLIP, rembg) e
 # baixado aqui no build; em runtime o Hub fica offline.

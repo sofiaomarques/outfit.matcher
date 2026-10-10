@@ -32,7 +32,9 @@ class GarmentAnalysisService {
     final request = http.MultipartRequest(
       'POST',
       Uri.parse('${ApiConfig.baseUrl}/items/analyze'),
-    )..files.add(
+    );
+    request.headers.addAll(await ApiConfig.authHeaders());
+    request.files.add(
       http.MultipartFile.fromBytes('file', imageBytes, filename: 'foto.jpg'),
     );
 
@@ -55,7 +57,9 @@ class GarmentAnalysisService {
     final request = http.MultipartRequest(
       'POST',
       Uri.parse('${ApiConfig.baseUrl}/items/crop'),
-    )..files.add(
+    );
+    request.headers.addAll(await ApiConfig.authHeaders());
+    request.files.add(
       http.MultipartFile.fromBytes('file', imageBytes, filename: 'foto.jpg'),
     );
 
