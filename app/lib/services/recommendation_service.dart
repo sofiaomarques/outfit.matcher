@@ -102,7 +102,12 @@ class RecommendationService {
       _notifyProgress(index, missing.length);
       try {
         final bytes = await _repository.downloadImage(item);
-        final features = await _analysisService.analisarPeca(bytes);
+        final features = {
+          ...await _analysisService.analisarPeca(bytes),
+          // Reanálise por versão nova: o que o cadastro sugeriu continua
+          // valendo como rótulo (#26).
+          'categoria_sugerida': ?item.features?['categoria_sugerida'],
+        };
         final swatch = swatchFromFeatures(features);
         await _repository.updateFeatures(item, features, swatch: swatch);
         analyzed[item.id] = item.copyWith(swatch: swatch, features: features);
