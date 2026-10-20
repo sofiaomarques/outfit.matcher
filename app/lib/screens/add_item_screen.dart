@@ -12,17 +12,39 @@ import '../theme/app_colors.dart';
 
 typedef _Analysis = ({Map<String, dynamic>? features, bool skipped});
 
+/// Escolhe a foto: câmera ou galeria. Nulo se a usuária desistir.
+typedef ImagePick = Future<Uint8List?> Function(ImageSource source);
+
+Future<Uint8List?> _pickWithImagePicker(ImageSource source) async {
+  final picked = await ImagePicker().pickImage(
+    source: source,
+    maxWidth: 1600,
+    imageQuality: 90,
+  );
+  return picked?.readAsBytes();
+}
+
 /// Tela de cadastro de uma peça nova: escolhe a foto (câmera ou galeria),
 /// preenche nome e categoria, e salva no guarda-roupa. Assim que a foto é
 /// escolhida, a API Python recorta a peça e, em paralelo, extrai as
 /// features (cor real, formalidade, embedding) que o recomendador de looks
-/// usa. A categoria continua sendo a que o usuário escolhe. Com a API
-/// acordando (cold start), dá pra salvar sem esperar: a peça vai sem recorte
-/// e sem features, e é analisada depois em `RecommendationService.loadWardrobe`.
+/// usa. A categoria detectada já vem marcada, mas a usuária pode corrigir
+/// (a escolha dela é a que vale), e `features.categoria_sugerida` guarda o
+/// que foi sugerido: cada correção vira um rótulo de foto real (#26). Com a
+/// API acordando (cold start), dá pra salvar sem esperar: a peça vai sem
+/// recorte e sem features, e é analisada depois em
+/// `RecommendationService.loadWardrobe`.
 class AddItemScreen extends StatefulWidget {
-  const AddItemScreen({super.key, required this.repository});
+  const AddItemScreen({
+    super.key,
+    required this.repository,
+    this.analysisService,
+    this.pickImage = _pickWithImagePicker,
+  });
 
   final WardrobeRepository repository;
+  final GarmentAnalysisService? analysisService;
+  final ImagePick pickImage;
 
   @override
   State<AddItemScreen> createState() => _AddItemScreenState();
@@ -30,8 +52,17 @@ class AddItemScreen extends StatefulWidget {
 
 class _AddItemScreenState extends State<AddItemScreen> {
   final _nameController = TextEditingController();
-  final _analysisService = GarmentAnalysisService();
-  ClothingCategory _category = ClothingCategory.top;
+  late final _analysisService =
+      widget.analysisService ?? GarmentAnalysisService();
+
+  /// Sem padrão: vem da análise ou da usuária, pra categoria salva nunca ser
+  /// um "Tops" que ninguém olhou.
+  ClothingCategory? _category;
+
+  /// A usuária tocou num chip: a análise não muda mais a escolha dela.
+  bool _categoryChosen = false;
+  ({ClothingCategory category, String name})? _detected;
+  bool _isDetecting = false;
   Uint8List? _imageBytes;
   bool _isSaving = false;
   bool _isCropping = false;
@@ -59,18 +90,23 @@ class _AddItemScreenState extends State<AddItemScreen> {
   void _onApiChange() => setState(() {});
 
   Future<void> _pickImage(ImageSource source) async {
-    final picked = await ImagePicker().pickImage(
-      source: source,
-      maxWidth: 1600,
-      imageQuality: 90,
-    );
-    if (picked == null) return;
-    final bytes = await picked.readAsBytes();
+    final bytes = await widget.pickImage(source);
+    if (bytes == null || !mounted) return;
+    final analysis = _analisarSemFalhar(bytes);
     setState(() {
+      // Foto trocada: a categoria era da peça anterior. Escolha feita antes
+      // da primeira foto continua valendo.
+      if (_imageBytes != null) {
+        _category = null;
+        _categoryChosen = false;
+      }
       _imageBytes = bytes;
       _isCropping = true;
-      _analysis = _analisarSemFalhar(bytes);
+      _analysis = analysis;
+      _detected = null;
+      _isDetecting = true;
     });
+    analysis.then((features) => _onAnalysis(analysis, features));
 
     try {
       final recorte = await _analysisService.recortarPeca(bytes);
@@ -81,6 +117,22 @@ class _AddItemScreenState extends State<AddItemScreen> {
     } finally {
       if (mounted) setState(() => _isCropping = false);
     }
+  }
+
+  void _onAnalysis(
+    Future<Map<String, dynamic>?> analysis,
+    Map<String, dynamic>? features,
+  ) {
+    // Análise de uma foto que já foi trocada por outra.
+    if (!mounted || analysis != _analysis) return;
+    final detected = detectedCategory(features);
+    setState(() {
+      _isDetecting = false;
+      _detected = detected;
+      if (detected != null && !_categoryChosen && !_isSaving) {
+        _category = detected.category;
+      }
+    });
   }
 
   Future<Map<String, dynamic>?> _analisarSemFalhar(Uint8List bytes) async {
@@ -165,6 +217,29 @@ class _AddItemScreenState extends State<AddItemScreen> {
       setState(() => _errorText = 'Dê um nome pra peça.');
       return;
     }
+    if (_category == null && _isDetecting && !ApiStatus.instance.isWaking) {
+      // A análise ainda roda (o "Salvar" libera com o fim do recorte):
+      // espera a detecção em vez de pedir a categoria.
+      setState(() {
+        _isSaving = true;
+        _isAnalyzing = true;
+        _errorText = null;
+      });
+      await _featuresOrSkip();
+      if (!mounted) return;
+      setState(() {
+        _isSaving = false;
+        _isAnalyzing = false;
+        // `_onAnalysis` não mexe no chip durante o salvamento.
+        _category ??= _detected?.category;
+      });
+    }
+    final category = _category;
+    if (category == null) {
+      setState(() => _errorText = 'Escolha a categoria da peça.');
+      return;
+    }
+    final suggested = _detected?.category;
 
     setState(() {
       _isSaving = true;
@@ -178,10 +253,12 @@ class _AddItemScreenState extends State<AddItemScreen> {
 
       await widget.repository.addItem(
         name: _nameController.text.trim(),
-        category: _category,
+        category: category,
         imageBytes: _imageBytes!,
         swatch: swatchFromFeatures(features) ?? AppColors.pink,
-        features: features,
+        features: features == null
+            ? null
+            : {...features, 'categoria_sugerida': ?suggested?.name},
       );
       if (!mounted) return;
       if (skipped) {
@@ -205,6 +282,19 @@ class _AddItemScreenState extends State<AddItemScreen> {
         });
       }
     }
+  }
+
+  String? _categoryHint() {
+    if (_detected case (:final name, :final category)) {
+      final nome = '${name[0].toUpperCase()}${name.substring(1)}';
+      return category == _category
+          ? 'Detectamos: $nome. Confere? Se não, toque na certa.'
+          : 'Detectamos: $nome.';
+    }
+    if (_isDetecting && !ApiStatus.instance.isWaking) {
+      return 'Detectando a categoria...';
+    }
+    return null;
   }
 
   @override
@@ -301,10 +391,21 @@ class _AddItemScreenState extends State<AddItemScreen> {
                   ChoiceChip(
                     label: Text(category.label),
                     selected: _category == category,
-                    onSelected: (_) => setState(() => _category = category),
+                    onSelected: (_) => setState(() {
+                      _category = category;
+                      _categoryChosen = true;
+                    }),
                   ),
               ],
             ),
+            if (_categoryHint() case final hint?) ...[
+              const SizedBox(height: 8),
+              Text(
+                hint,
+                style: Theme.of(context).textTheme.bodyMedium
+                    ?.copyWith(color: AppColors.textMuted),
+              ),
+            ],
             if (_errorText != null) ...[
               const SizedBox(height: 12),
               Text(_errorText!, style: const TextStyle(color: AppColors.error)),

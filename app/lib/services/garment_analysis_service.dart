@@ -5,6 +5,7 @@ import 'dart:ui';
 
 import 'package:http/http.dart' as http;
 
+import '../models/clothing_category.dart';
 import 'api_config.dart';
 import 'api_status.dart';
 
@@ -19,6 +20,19 @@ Color? swatchFromFeatures(Map<String, dynamic>? features) {
     (rgb[1] as num).toInt(),
     (rgb[2] as num).toInt(),
   );
+}
+
+/// Categoria detectada pela API: o chip do app e o nome do tipo, como
+/// "calça" ou "blusa de manga". Nula se a peça não foi analisada.
+({ClothingCategory category, String name})? detectedCategory(
+  Map<String, dynamic>? features,
+) {
+  final category = ClothingCategory.fromDetectedCode(
+    (features?['categoria_codigo'] as num?)?.toInt(),
+  );
+  final name = features?['categoria'] as String?;
+  if (category == null || name == null || name.isEmpty) return null;
+  return (category: category, name: name);
 }
 
 /// Cliente da API Python que roda o pipeline de `features/*.py`
