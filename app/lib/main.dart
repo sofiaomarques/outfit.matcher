@@ -5,10 +5,11 @@ import 'screens/auth_screen.dart';
 import 'screens/favorites_screen.dart';
 import 'screens/looks_screen.dart';
 import 'screens/new_look_screen.dart';
-import 'screens/placeholder_screen.dart';
+import 'screens/settings_screen.dart';
 import 'screens/wardrobe_screen.dart';
 import 'screens/wishlist_screen.dart';
 import 'services/api_status.dart';
+import 'services/outfit_history.dart';
 import 'services/supabase_config.dart';
 import 'theme/app_theme.dart';
 import 'widgets/app_shell.dart';
@@ -81,14 +82,14 @@ class _RootNavigatorState extends State<_RootNavigator> {
   int _selectedIndex = 0;
   String? _apiWokenFor;
 
-  static const _screens = [
-    WardrobeScreen(),
-    NewLookScreen(),
-    LooksScreen(),
-    WishlistScreen(),
-    FavoritesScreen(),
-    PlaceholderScreen(title: 'Configurações'),
-  ];
+  // Muda depois de "Apagar meus dados": a key nova recria as outras telas,
+  // que carregam de novo (agora vazias).
+  int _dataVersion = 0;
+
+  void _onDataErased() {
+    setState(() => _dataVersion++);
+    OutfitHistory.instance.load().ignore();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -110,7 +111,17 @@ class _RootNavigatorState extends State<_RootNavigator> {
           selectedIndex: _selectedIndex,
           onDestinationSelected: (index) =>
               setState(() => _selectedIndex = index),
-          body: IndexedStack(index: _selectedIndex, children: _screens),
+          body: IndexedStack(
+            index: _selectedIndex,
+            children: [
+              WardrobeScreen(key: ValueKey(('wardrobe', _dataVersion))),
+              NewLookScreen(key: ValueKey(('new-look', _dataVersion))),
+              LooksScreen(key: ValueKey(('looks', _dataVersion))),
+              WishlistScreen(key: ValueKey(('wishlist', _dataVersion))),
+              FavoritesScreen(key: ValueKey(('favorites', _dataVersion))),
+              SettingsScreen(onDataErased: _onDataErased),
+            ],
+          ),
         );
       },
     );
