@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -14,6 +16,8 @@ class _FakeRepository implements OutfitHistoryRepository {
   List<(List<String>, String?)> rejections = [];
   bool fail = false;
   bool failFetchRejections = false;
+  // Se definido, os favoritos só chegam quando ele completar.
+  Completer<void>? gate;
   // Falha só pra esses looks (ids juntados com '+').
   final failFor = <String>{};
   final added = <List<String>>[];
@@ -30,7 +34,11 @@ class _FakeRepository implements OutfitHistoryRepository {
   }
 
   @override
-  Future<List<List<String>>> fetchFavorites() async => favorites;
+  Future<List<List<String>>> fetchFavorites() async {
+    final snapshot = favorites;
+    await gate?.future;
+    return snapshot;
+  }
 
   @override
   Future<List<(List<String>, DateTime)>> fetchWears({
@@ -109,6 +117,35 @@ void main() {
     expect(history.isFavorite(_outfit([blusa, calca])), isTrue);
     expect(history.isFavorite(_outfit([blusa, saia])), isFalse);
     expect(history.lastWorn(_outfit([calca, blusa])), DateTime(2026, 9, 20));
+  });
+
+  test('reset esquece tudo e descarta a carga em andamento', () async {
+    final repo = _FakeRepository()
+      ..favorites = [
+        ['a-calca', 'b-blusa'],
+      ];
+    final history = OutfitHistory(repository: repo);
+    await history.load(now: DateTime(2026, 9, 26));
+    expect(history.isFavorite(_outfit([blusa, calca])), isTrue);
+
+    // Uma carga começa antes de apagar e só responde depois.
+    final gate = Completer<void>();
+    repo.gate = gate;
+    final stale = history.load(now: DateTime(2026, 9, 26));
+    history.reset();
+    expect(history.isFavorite(_outfit([blusa, calca])), isFalse);
+
+    repo
+      ..favorites = []
+      ..gate = null;
+    final fresh = history.load(now: DateTime(2026, 9, 26));
+    expect(identical(fresh, stale), isFalse);
+    await fresh;
+
+    // A carga antiga termina depois e não traz o favorito de volta.
+    gate.complete();
+    await stale;
+    expect(history.isFavorite(_outfit([blusa, calca])), isFalse);
   });
 
   test('favoritar e desfavoritar salvam no repositório', () async {

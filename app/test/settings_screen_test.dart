@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -12,6 +14,8 @@ class _FakeAccount implements AccountRepository {
   bool fail = false;
   int signOuts = 0;
   int erases = 0;
+  // Se definido, o apagar só termina quando ele completar.
+  Completer<void>? gate;
 
   @override
   Future<void> signOut() async {
@@ -21,6 +25,7 @@ class _FakeAccount implements AccountRepository {
 
   @override
   Future<void> eraseMyData() async {
+    await gate?.future;
     if (fail) throw Exception('offline');
     erases++;
   }
@@ -74,6 +79,17 @@ void main() {
     expect(find.text('Mandar feedback'), findsOneWidget);
   });
 
+  testWidgets('link de feedback sem esquema avisa em vez de quebrar', (
+    tester,
+  ) async {
+    await pumpSettings(tester, feedbackLink: 'forms.exemplo.com/x');
+
+    await tester.tap(find.text('Mandar feedback'));
+    await tester.pump();
+
+    expect(find.text('Não foi possível abrir o link.'), findsOneWidget);
+  });
+
   testWidgets('"Sair" desloga; se falhar, avisa', (tester) async {
     await pumpSettings(tester);
 
@@ -114,9 +130,27 @@ void main() {
     );
   });
 
-  testWidgets('se apagar falhar, avisa e não recarrega as telas', (
-    tester,
-  ) async {
+  testWidgets('enquanto apaga, um diálogo tampa o app', (tester) async {
+    account.gate = Completer();
+    await pumpSettings(tester);
+
+    await tapErase(tester);
+    await tester.tap(find.text('Apagar tudo'));
+    await tester.pump();
+    expect(find.text('Apagando seus dados...'), findsOneWidget);
+
+    // Tocar fora não fecha.
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pump();
+    expect(find.text('Apagando seus dados...'), findsOneWidget);
+
+    account.gate!.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Apagando seus dados...'), findsNothing);
+    expect(erasedCallbacks, 1);
+  });
+
+  testWidgets('se apagar falhar, avisa e recarrega as telas', (tester) async {
     account.fail = true;
     await pumpSettings(tester);
 
@@ -124,7 +158,8 @@ void main() {
     await tester.tap(find.text('Apagar tudo'));
     await tester.pumpAndSettle();
 
-    expect(erasedCallbacks, 0);
+    // Parte pode ter sido apagada antes da falha.
+    expect(erasedCallbacks, 1);
     expect(
       find.textContaining('Não foi possível apagar tudo.'),
       findsOneWidget,

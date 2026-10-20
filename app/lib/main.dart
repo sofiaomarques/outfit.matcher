@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -86,9 +88,32 @@ class _RootNavigatorState extends State<_RootNavigator> {
   // que carregam de novo (agora vazias).
   int _dataVersion = 0;
 
+  late final StreamSubscription<AuthState> _authSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((
+      state,
+    ) {
+      if (state.event != AuthChangeEvent.signedOut) return;
+      // A próxima conta não herda o histórico de looks nem a aba aberta.
+      OutfitHistory.instance.reset();
+      if (mounted) setState(() => _selectedIndex = 0);
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSubscription.cancel();
+    super.dispose();
+  }
+
   void _onDataErased() {
     setState(() => _dataVersion++);
-    OutfitHistory.instance.load().ignore();
+    OutfitHistory.instance
+      ..reset()
+      ..load().ignore();
   }
 
   @override

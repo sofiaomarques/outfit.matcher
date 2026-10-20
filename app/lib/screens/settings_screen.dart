@@ -70,26 +70,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (confirmed != true || !mounted) return;
 
     setState(() => _isErasing = true);
+    // Tampa o app inteiro (inclusive a navegação) enquanto apaga: uma peça
+    // adicionada no meio ficaria com a linha, mas sem a foto.
+    final navigator = Navigator.of(context, rootNavigator: true);
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const PopScope(canPop: false, child: _ErasingDialog()),
+    ).ignore();
+    String message;
     try {
       await _repository.eraseMyData();
-      if (!mounted) return;
-      _showMessage('Pronto: seus dados e fotos foram apagados.');
-      widget.onDataErased();
+      message = 'Pronto: seus dados e fotos foram apagados.';
     } catch (_) {
-      _showMessage(
-        'Não foi possível apagar tudo. Tente de novo: o que já foi apagado '
-        'não volta.',
-      );
-    } finally {
-      if (mounted) setState(() => _isErasing = false);
+      message =
+          'Não foi possível apagar tudo. Tente de novo: o que já foi apagado '
+          'não volta.';
     }
+    navigator.pop();
+    // Mesmo se falhou no meio, parte já pode ter sido apagada: as outras
+    // telas recarregam pra não mostrar o que não existe mais.
+    widget.onDataErased();
+    if (!mounted) return;
+    setState(() => _isErasing = false);
+    _showMessage(message);
   }
 
   Future<void> _openFeedback() async {
     final uri = Uri.tryParse(widget.feedbackLink);
-    final opened =
-        uri != null &&
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+    var opened = false;
+    if (uri != null && uri.hasScheme) {
+      try {
+        opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (_) {
+        // Nenhum app pra abrir o link, ou link inválido pra plataforma.
+      }
+    }
     if (!opened) _showMessage('Não foi possível abrir o link.');
   }
 
@@ -182,6 +198,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ErasingDialog extends StatelessWidget {
+  const _ErasingDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return const AlertDialog(
+      content: Row(
+        children: [
+          SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          SizedBox(width: 16),
+          Expanded(child: Text('Apagando seus dados...')),
         ],
       ),
     );

@@ -28,6 +28,8 @@ class OutfitHistory extends ChangeNotifier {
   Map<String, List<String>> _wornIds = {};
   Future<void>? _loading;
   bool _loaded = false;
+  // Muda em [reset]: uma carga que começou antes descarta o que trouxe.
+  int _generation = 0;
 
   /// Ids das peças de cada look favoritado, do mais recente pro mais antigo.
   List<List<String>> get favorites => List.unmodifiable(_favorites);
@@ -52,14 +54,35 @@ class OutfitHistory extends ChangeNotifier {
   /// Recarrega do Supabase. Várias telas abrem juntas e chamam isso ao
   /// mesmo tempo; elas compartilham o mesmo pedido.
   Future<void> load({DateTime? now}) {
-    return _loading ??= _load(now ?? DateTime.now())
-        .whenComplete(() => _loading = null);
+    final pending = _loading;
+    if (pending != null) return pending;
+    final loading = _load(now ?? DateTime.now(), _generation);
+    _loading = loading;
+    loading.whenComplete(() {
+      // Depois de um [reset], `_loading` já pode ser outra carga.
+      if (identical(_loading, loading)) _loading = null;
+    }).ignore();
+    return loading;
   }
 
   /// Carrega só se ainda não carregou nenhuma vez.
   Future<void> ensureLoaded() => _loaded ? Future.value() : load();
 
-  Future<void> _load(DateTime now) async {
+  /// Esquece tudo o que foi carregado (depois de sair da conta ou de apagar
+  /// os dados). Uma carga em andamento não preenche mais nada: o próximo
+  /// [load] busca de novo.
+  void reset() {
+    _generation++;
+    _loading = null;
+    _loaded = false;
+    _favorites = [];
+    _rejections = [];
+    _lastWorn = {};
+    _wornIds = {};
+    notifyListeners();
+  }
+
+  Future<void> _load(DateTime now, int generation) async {
     final (favorites, wears, rejections) = await (
       _repository.fetchFavorites(),
       _repository.fetchWears(since: now.subtract(wearWindow)),
@@ -69,6 +92,7 @@ class OutfitHistory extends ChangeNotifier {
         (_) => <(List<String>, String?)>[],
       ),
     ).wait;
+    if (generation != _generation) return;
     _favorites = favorites;
     _rejections = rejections;
     _lastWorn = {};
