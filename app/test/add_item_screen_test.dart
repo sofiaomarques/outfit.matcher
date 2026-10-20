@@ -17,14 +17,17 @@ final _foto = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
 );
 
-/// Análise que só termina quando o teste manda; o recorte sempre falha
-/// (a tela fica com a foto original).
+/// Análise que só termina quando o teste manda (`analysis` é a da última
+/// foto); o recorte sempre falha (a tela fica com a foto original).
 class _FakeAnalysis extends GarmentAnalysisService {
-  final analysis = Completer<Map<String, dynamic>>();
+  final _analyses = <Completer<Map<String, dynamic>>>[];
+  Completer<Map<String, dynamic>> get analysis => _analyses.last;
 
   @override
-  Future<Map<String, dynamic>> analisarPeca(Uint8List imageBytes) =>
-      analysis.future;
+  Future<Map<String, dynamic>> analisarPeca(Uint8List imageBytes) {
+    _analyses.add(Completer());
+    return analysis.future;
+  }
 
   @override
   Future<Uint8List> recortarPeca(Uint8List imageBytes) =>
@@ -99,7 +102,10 @@ void main() {
     }
 
     Future<void> pickPhoto(WidgetTester tester) async {
-      await tester.tap(find.byIcon(Icons.add_a_photo_outlined));
+      // Com foto, toca na própria foto (troca).
+      final area = find.byType(AspectRatio).first;
+      await tester.ensureVisible(area);
+      await tester.tap(area);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Escolher da galeria'));
       await tester.pumpAndSettle();
@@ -199,6 +205,46 @@ void main() {
       await save(tester);
       expect(repository.savedCategory, ClothingCategory.top);
       expect(repository.savedFeatures, isNull);
+    });
+
+    testWidgets('salvar antes da detecção espera a análise', (tester) async {
+      await pumpScreen(tester);
+      await pickPhoto(tester);
+
+      await tester.enterText(find.byType(TextField), 'Calça jeans');
+      final salvar = find.widgetWithText(ElevatedButton, 'Salvar');
+      await tester.ensureVisible(salvar);
+      await tester.tap(salvar);
+      await tester.pump();
+      expect(find.text('Escolha a categoria da peça.'), findsNothing);
+      expect(repository.savedCategory, isNull);
+
+      analysis.analysis.complete(_features(1, 'calça'));
+      await tester.pumpAndSettle();
+
+      expect(repository.savedCategory, ClothingCategory.bottom);
+      expect(repository.savedFeatures?['categoria_sugerida'], 'bottom');
+    });
+
+    testWidgets('trocar a foto descarta a categoria da anterior', (
+      tester,
+    ) async {
+      await pumpScreen(tester);
+      await pickPhoto(tester);
+      analysis.analysis.complete(_features(1, 'calça'));
+      await tester.pumpAndSettle();
+      await choose(tester, ClothingCategory.skirt);
+      await tester.pump();
+
+      await pickPhoto(tester);
+      expect(
+        ClothingCategory.values.where((c) => selected(tester, c)),
+        isEmpty,
+      );
+
+      analysis.analysis.complete(_features(4, 'vestido'));
+      await tester.pumpAndSettle();
+      expect(selected(tester, ClothingCategory.dress), isTrue);
     });
   });
 }

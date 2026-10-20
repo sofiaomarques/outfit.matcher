@@ -94,6 +94,12 @@ class _AddItemScreenState extends State<AddItemScreen> {
     if (bytes == null || !mounted) return;
     final analysis = _analisarSemFalhar(bytes);
     setState(() {
+      // Foto trocada: a categoria era da peça anterior. Escolha feita antes
+      // da primeira foto continua valendo.
+      if (_imageBytes != null) {
+        _category = null;
+        _categoryChosen = false;
+      }
       _imageBytes = bytes;
       _isCropping = true;
       _analysis = analysis;
@@ -210,6 +216,23 @@ class _AddItemScreenState extends State<AddItemScreen> {
     if (_nameController.text.trim().isEmpty) {
       setState(() => _errorText = 'Dê um nome pra peça.');
       return;
+    }
+    if (_category == null && _isDetecting && !ApiStatus.instance.isWaking) {
+      // A análise ainda roda (o "Salvar" libera com o fim do recorte):
+      // espera a detecção em vez de pedir a categoria.
+      setState(() {
+        _isSaving = true;
+        _isAnalyzing = true;
+        _errorText = null;
+      });
+      await _featuresOrSkip();
+      if (!mounted) return;
+      setState(() {
+        _isSaving = false;
+        _isAnalyzing = false;
+        // `_onAnalysis` não mexe no chip durante o salvamento.
+        _category ??= _detected?.category;
+      });
     }
     final category = _category;
     if (category == null) {
