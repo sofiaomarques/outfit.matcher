@@ -85,7 +85,8 @@ class WelcomeScreen extends StatelessWidget {
                                     minHeight: constraints.maxHeight,
                                   ),
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [_Hero(onSignUp: onSignUp)],
                                   ),
@@ -121,16 +122,18 @@ class _TopBar extends StatelessWidget {
         const SizedBox(width: 8),
         Text(
           'Wable',
-          style: Theme.of(
-            context,
-          ).textTheme.headlineMedium?.copyWith(fontSize: 20, height: 1),
+          style: Theme.of(context).textTheme.headlineMedium
+              ?.copyWith(fontSize: 20, height: 1),
         ),
         const Spacer(),
         TextButton(
           onPressed: onLogin,
           child: const Text(
             'Entrar',
-            style: TextStyle(color: AppColors.wine, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              color: AppColors.wine,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
         const SizedBox(width: 8),

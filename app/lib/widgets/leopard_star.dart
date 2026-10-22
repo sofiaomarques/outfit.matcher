@@ -113,9 +113,7 @@ class _LeopardStarPainter extends CustomPainter {
         center.dx + lobeRadius * math.cos(angle),
         center.dy + lobeRadius * math.sin(angle),
       );
-      path.addOval(
-        Rect.fromCircle(center: offset, radius: radius * 0.65),
-      );
+      path.addOval(Rect.fromCircle(center: offset, radius: radius * 0.65));
     }
     canvas.drawPath(path, paint);
   }

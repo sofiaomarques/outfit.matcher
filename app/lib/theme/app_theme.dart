@@ -35,10 +35,7 @@ class AppTheme {
         fontWeight: FontWeight.w600,
         color: AppColors.textDark,
       ),
-      bodyLarge: GoogleFonts.quicksand(
-        fontSize: 16,
-        color: AppColors.textDark,
-      ),
+      bodyLarge: GoogleFonts.quicksand(fontSize: 16, color: AppColors.textDark),
       bodyMedium: GoogleFonts.quicksand(
         fontSize: 14,
         color: AppColors.textMuted,
@@ -150,9 +147,7 @@ class AppTheme {
         backgroundColor: AppColors.wine,
         contentTextStyle: GoogleFonts.quicksand(color: AppColors.cream),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     );
   }

@@ -102,9 +102,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                 const Spacer(),
                 IconButton.filled(
                   onPressed: _openAddItem,
-                  style: IconButton.styleFrom(
-                    backgroundColor: AppColors.pink,
-                  ),
+                  style: IconButton.styleFrom(backgroundColor: AppColors.pink),
                   icon: const Icon(Icons.add),
                 ),
               ],
@@ -274,9 +272,8 @@ class _GarmentCard extends StatelessWidget {
                     item.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.textDark,
-                    ),
+                    style: Theme.of(context).textTheme.bodyMedium
+                        ?.copyWith(color: AppColors.textDark),
                   ),
                 ),
                 const Icon(
@@ -304,14 +301,17 @@ class _EmptyState extends StatelessWidget {
         children: [
           Opacity(
             opacity: 0.5,
-            child: PaintedHeart(size: 40, color: AppColors.pink, rotation: -0.1),
+            child: PaintedHeart(
+              size: 40,
+              color: AppColors.pink,
+              rotation: -0.1,
+            ),
           ),
           const SizedBox(height: 12),
           Text(
             'Nenhuma peça nessa categoria ainda.',
-            style: Theme.of(
-              context,
-            ).textTheme.bodyLarge?.copyWith(color: AppColors.textMuted),
+            style: Theme.of(context).textTheme.bodyLarge
+                ?.copyWith(color: AppColors.textMuted),
           ),
         ],
       ),
@@ -333,9 +333,8 @@ class _ErrorState extends StatelessWidget {
         children: [
           Text(
             message,
-            style: Theme.of(
-              context,
-            ).textTheme.bodyLarge?.copyWith(color: AppColors.textMuted),
+            style: Theme.of(context).textTheme.bodyLarge
+                ?.copyWith(color: AppColors.textMuted),
           ),
           const SizedBox(height: 12),
           TextButton(onPressed: onRetry, child: const Text('Tentar de novo')),

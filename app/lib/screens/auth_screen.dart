@@ -161,7 +161,8 @@ class _AuthFormState extends State<_AuthForm> {
                         labelText: 'Como você quer ser chamada?',
                         helperText: 'Apelido ou nome — é assim que vamos te chamar no app.',
                       ),
-                      validator: (value) => (value == null || value.trim().isEmpty)
+                      validator: (value) =>
+                          (value == null || value.trim().isEmpty)
                           ? 'Diz como podemos te chamar'
                           : null,
                     ),
@@ -172,7 +173,8 @@ class _AuthFormState extends State<_AuthForm> {
                     keyboardType: TextInputType.emailAddress,
                     autofillHints: const [AutofillHints.email],
                     decoration: const InputDecoration(labelText: 'E-mail'),
-                    validator: (value) => (value == null || !value.contains('@'))
+                    validator: (value) =>
+                        (value == null || !value.contains('@'))
                         ? 'Digite um e-mail válido'
                         : null,
                   ),
@@ -195,7 +197,10 @@ class _AuthFormState extends State<_AuthForm> {
                   ],
                   if (_infoText != null) ...[
                     const SizedBox(height: 12),
-                    Text(_infoText!, style: const TextStyle(color: AppColors.wine)),
+                    Text(
+                      _infoText!,
+                      style: const TextStyle(color: AppColors.wine),
+                    ),
                   ],
                   const SizedBox(height: 24),
                   ElevatedButton(

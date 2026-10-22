@@ -159,10 +159,7 @@ class _AddWishlistItemScreenState extends State<AddWishlistItemScreen> {
             ),
             if (_errorText != null) ...[
               const SizedBox(height: 12),
-              Text(
-                _errorText!,
-                style: const TextStyle(color: AppColors.error),
-              ),
+              Text(_errorText!, style: const TextStyle(color: AppColors.error)),
             ],
             const SizedBox(height: 24),
             ElevatedButton(

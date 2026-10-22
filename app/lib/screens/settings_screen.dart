@@ -85,6 +85,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await _repository.eraseMyData();
       message = 'Pronto: seus dados e fotos foram apagados.';
     } catch (e) {
+      debugPrint('Apagar meus dados falhou: $e');
       reload = e is! EraseFailure || e.partial;
       message =
           'Não foi possível apagar tudo. Tente de novo: o que já foi apagado '

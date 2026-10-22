@@ -96,8 +96,7 @@ String _detectImageContentType(Uint8List bytes) {
   const pngSignature = [0x89, 0x50, 0x4E, 0x47];
   final isPng =
       bytes.length >= pngSignature.length &&
-      Iterable.generate(
-        pngSignature.length,
-      ).every((i) => bytes[i] == pngSignature[i]);
+      Iterable.generate(pngSignature.length)
+          .every((i) => bytes[i] == pngSignature[i]);
   return isPng ? 'image/png' : 'image/jpeg';
 }

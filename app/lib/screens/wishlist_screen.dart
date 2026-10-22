@@ -77,10 +77,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
           children: [
             Row(
               children: [
-                const Icon(
-                  Icons.shopping_cart_outlined,
-                  color: AppColors.wine,
-                ),
+                const Icon(Icons.shopping_cart_outlined, color: AppColors.wine),
                 const SizedBox(width: 10),
                 Text(
                   'Wishlist',
@@ -89,9 +86,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
                 const Spacer(),
                 IconButton.filled(
                   onPressed: _openAddItem,
-                  style: IconButton.styleFrom(
-                    backgroundColor: AppColors.pink,
-                  ),
+                  style: IconButton.styleFrom(backgroundColor: AppColors.pink),
                   icon: const Icon(Icons.add),
                 ),
               ],
@@ -173,9 +168,8 @@ class _WishlistCard extends StatelessWidget {
               item.description,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: AppColors.textDark),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: AppColors.textDark),
             ),
           ],
         ),
@@ -213,9 +207,7 @@ class _WishlistThumbnail extends StatelessWidget {
         fit: BoxFit.cover,
         loadingBuilder: (context, child, progress) {
           if (progress == null) return child;
-          return const Center(
-            child: CircularProgressIndicator(strokeWidth: 2),
-          );
+          return const Center(child: CircularProgressIndicator(strokeWidth: 2));
         },
       ),
     );
@@ -242,9 +234,8 @@ class _EmptyState extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             'Nenhuma peça na wishlist ainda.',
-            style: Theme.of(
-              context,
-            ).textTheme.bodyLarge?.copyWith(color: AppColors.textMuted),
+            style: Theme.of(context).textTheme.bodyLarge
+                ?.copyWith(color: AppColors.textMuted),
           ),
         ],
       ),
@@ -266,9 +257,8 @@ class _ErrorState extends StatelessWidget {
         children: [
           Text(
             message,
-            style: Theme.of(
-              context,
-            ).textTheme.bodyLarge?.copyWith(color: AppColors.textMuted),
+            style: Theme.of(context).textTheme.bodyLarge
+                ?.copyWith(color: AppColors.textMuted),
           ),
           const SizedBox(height: 12),
           TextButton(onPressed: onRetry, child: const Text('Tentar de novo')),

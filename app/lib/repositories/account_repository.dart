@@ -26,12 +26,18 @@ class AccountRepository {
     await eraseUserData(
       userId: userId,
       deleteRows: (table) => _client.from(table).delete().eq('user_id', userId),
-      listFiles: (bucket) async => [
+      hasRows: (table) async =>
+          (await _client
+                  .from(table)
+                  .select('user_id')
+                  .eq('user_id', userId)
+                  .limit(1))
+              .isNotEmpty,
+      listFiles: (bucket) async => folderFilePaths(userId, [
         for (final file
             in await _client.storage.from(bucket).list(path: userId))
-          // Sem id = pasta, não arquivo.
-          if (file.id != null) '$userId/${file.name}',
-      ],
+          (id: file.id, name: file.name),
+      ]),
       removeFiles: (bucket, paths) async =>
           (await _client.storage.from(bucket).remove(paths)).length,
     );
@@ -56,8 +62,9 @@ const _buckets = ['clothing-images', 'wishlist-images'];
 /// versões antigas repassavam.
 const _tableNotFound = {'PGRST205', '42P01'};
 
-/// "Apagar meus dados" não terminou. [partial] diz se algo já foi apagado
-/// antes da falha, pra as telas só recarregarem quando mudou alguma coisa.
+/// "Apagar meus dados" não terminou. [partial] diz se algum pedido de apagar
+/// já foi concluído antes da falha (mesmo que a pasta ou a tabela estivesse
+/// vazia), pra as telas só recarregarem quando pode ter mudado alguma coisa.
 class EraseFailure implements Exception {
   EraseFailure(this.cause, {required this.partial});
 
@@ -68,14 +75,30 @@ class EraseFailure implements Exception {
   String toString() => 'EraseFailure(partial: $partial): $cause';
 }
 
+/// Caminhos dos arquivos de [entries] (o que o Storage listou em `{userId}/`).
+/// Sem id é pasta, não arquivo: as fotos do app ficam direto em `{userId}/`,
+/// sem subpastas, então só os arquivos são apagados.
+List<String> folderFilePaths(
+  String userId,
+  Iterable<({String? id, String name})> entries,
+) => [
+  for (final entry in entries)
+    if (entry.id != null) '$userId/${entry.name}',
+];
+
 /// As linhas vão primeiro, todas ao mesmo tempo, e depois as fotos dos dois
 /// buckets: se as fotos falharem no meio, tentar de novo termina o serviço,
 /// porque as fotos são listadas direto do Storage (pega até foto sem linha).
 /// Não é atômico: tornar isso atômico exigiria uma função `security definer`
 /// no banco.
+///
+/// O PostgREST não dá erro quando o RLS recusa um delete, só não apaga nada:
+/// por isso [hasRows] confere se sobrou alguma linha depois de cada delete.
+/// Pelo mesmo motivo, [listFiles] só pode devolver caminhos de `{userId}/`.
 Future<void> eraseUserData({
   required String userId,
   required Future<void> Function(String table) deleteRows,
+  required Future<bool> Function(String table) hasRows,
   required Future<List<String>> Function(String bucket) listFiles,
   required Future<int> Function(String bucket, List<String> paths) removeFiles,
 }) async {
@@ -87,6 +110,9 @@ Future<void> eraseUserData({
           try {
             await deleteRows(table);
             progressed = true;
+            if (await hasRows(table)) {
+              throw StateError('O banco não apagou tudo de $table (RLS?).');
+            }
           } on PostgrestException catch (e) {
             if (!_optionalTables.contains(table) ||
                 !_tableNotFound.contains(e.code)) {
@@ -98,7 +124,13 @@ Future<void> eraseUserData({
     await Future.wait([
       for (final bucket in _buckets)
         removeAllFiles(
-          list: () => listFiles(bucket),
+          list: () async {
+            final paths = await listFiles(bucket);
+            if (paths.any((path) => !path.startsWith('$userId/'))) {
+              throw StateError('Arquivo fora da pasta de $bucket/$userId.');
+            }
+            return paths;
+          },
           remove: (paths) async {
             final removed = await removeFiles(bucket, paths);
             if (removed > 0) progressed = true;

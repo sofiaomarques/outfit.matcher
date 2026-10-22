@@ -204,11 +204,13 @@ void main() {
 
     Future<void> erase({
       Future<void> Function(String table)? deleteRows,
+      Future<bool> Function(String table)? hasRows,
       Future<int> Function(String bucket, List<String> paths)? removeFiles,
     }) {
       return eraseUserData(
         userId: 'u',
         deleteRows: deleteRows ?? (table) async => deleted.add(table),
+        hasRows: hasRows ?? (_) async => false,
         listFiles: (bucket) async => List.of(files[bucket]!),
         removeFiles:
             removeFiles ??
@@ -269,12 +271,48 @@ void main() {
       );
     });
 
+    test('delete que o RLS recusou em silêncio é erro', () async {
+      await expectLater(
+        erase(hasRows: (table) async => table == 'wishlist_items'),
+        throwsA(isA<EraseFailure>().having((e) => e.partial, 'partial', true)),
+      );
+      // As fotos só são apagadas depois das linhas.
+      expect(files['clothing-images'], hasLength(2));
+    });
+
+    test('caminho fora da pasta do usuário não é apagado', () async {
+      files['clothing-images'] = ['outro/a.jpg'];
+
+      await expectLater(
+        erase(
+          removeFiles: (bucket, paths) async {
+            files[bucket]!.removeWhere(paths.contains);
+            return paths.length;
+          },
+        ),
+        throwsA(isA<EraseFailure>()),
+      );
+      // Só a pasta do outro usuário ficou intacta; o outro bucket é normal.
+      expect(files['clothing-images'], ['outro/a.jpg']);
+    });
+
     test('falha no Storage depois das linhas é parcial', () async {
       await expectLater(
         erase(removeFiles: (_, _) async => 0),
         throwsA(isA<EraseFailure>().having((e) => e.partial, 'partial', true)),
       );
     });
+  });
+
+  test('folderFilePaths ignora pastas e prefixa o id da usuária', () {
+    expect(
+      folderFilePaths('u', [
+        (id: 'x', name: 'a.jpg'),
+        (id: null, name: 'subpasta'),
+        (id: 'y', name: 'b.jpg'),
+      ]),
+      ['u/a.jpg', 'u/b.jpg'],
+    );
   });
 
   group('removeAllFiles', () {
