@@ -16,7 +16,19 @@ from api.auth import Autenticador
 from api.main import app
 from features.embedding_neural import VERSAO_FEATURES
 import api.main
-from model.recomendar import CAMADAS, CLIMAS, OCASIOES
+from model.recomendar import (
+    CAMADAS,
+    CLIMAS,
+    ESCURIDAO_POR_TONALIDADE,
+    OCASIOES,
+    PERIODOS,
+    PESOS,
+    Peca,
+    _ajustes_periodo,
+    peca_de_features,
+    probabilidades_contextos,
+    recomendar,
+)
 
 FIXTURE = Path("tests/fixtures/guarda_roupa.json")
 FOTO = Path("dados/roupas/saia.jpg")
@@ -118,6 +130,70 @@ def test_recomenda_looks_validos_pra_toda_ocasiao_e_clima(cliente, pecas, ocasia
     assert all(0 <= s <= 1 for s in scores)
 
 
+@pytest.mark.parametrize("ocasiao", [None, *OCASIOES])
+def test_noite_devolve_looks_validos_com_detalhe_de_periodo(cliente, pecas, ocasiao):
+    corpo = _recomendar(cliente, pecas, ocasiao=ocasiao, periodo="noite")
+    assert corpo["looks"]
+    _checar_looks(corpo["looks"], pecas)
+    assert all(0 <= look["detalhes"]["periodo"] <= 1 for look in corpo["looks"])
+    assert all(0 <= look["score"] <= 1 for look in corpo["looks"])
+
+
+def test_noite_prefere_cor_escura_com_o_resto_igual(pecas):
+    base = np.asarray(pecas[0]["features"]["embedding"], dtype=np.float32)
+    versoes = []
+    for tonalidade in (0, 2):
+        emb = base.copy()
+        emb[6] = tonalidade / 3
+        versoes.append(Peca(f"t{tonalidade}", "top", emb, 4))
+    por_contexto = probabilidades_contextos(np.stack([p.embedding for p in versoes]))
+    ajustes = _ajustes_periodo(versoes, PERIODOS["noite"], por_contexto)
+    assert ajustes["t2"] > ajustes["t0"]
+
+
+def _pecas_modelo(pecas: list[dict]) -> list[Peca]:
+    return [peca_de_features(p["id"], p["categoria"], p["features"]) for p in pecas]
+
+
+def test_noite_nao_empata_pecas_arrumadas(pecas):
+    """A parte "arrumada" nao pode saturar (antes saia, blusa, camisa, jeans e
+    vestido empatavam em 1): com a mesma cor, a saia de encontro pontua mais
+    que o jeans, e o jeans mais que o short."""
+    modelo = _pecas_modelo(pecas)
+    for p in modelo:
+        p.embedding[6] = 0  # mesma tonalidade pra todas
+    por_contexto = probabilidades_contextos(np.stack([p.embedding for p in modelo]))
+    ajustes = _ajustes_periodo(modelo, PERIODOS["noite"], por_contexto)
+    assert ajustes["saia-real"] > ajustes["jeans-kaggle"] > ajustes["short-kaggle"]
+
+
+def test_noite_em_festa_nao_conta_o_clip_duas_vezes(pecas):
+    """Em festa a ocasiao ja pontua festa/encontro: o periodo so olha a cor."""
+    modelo = _pecas_modelo(pecas)
+    por_contexto = probabilidades_contextos(np.stack([p.embedding for p in modelo]))
+    ajustes = _ajustes_periodo(modelo, PERIODOS["noite"], por_contexto, OCASIOES["festa"])
+    for p in modelo:
+        assert ajustes[p.id] == ESCURIDAO_POR_TONALIDADE[round(float(p.embedding[6]) * 3)]
+
+
+def test_noite_muda_a_ordem_e_sem_periodo_nada_muda(cliente, pecas):
+    sem = _recomendar(cliente, pecas, ocasiao="encontro")["looks"]
+    noite = _recomendar(cliente, pecas, ocasiao="encontro", periodo="noite")["looks"]
+    assert [l["pecas"] for l in sem] != [l["pecas"] for l in noite]
+    assert all(l["detalhes"]["periodo"] == 1 for l in sem)
+    # Sem periodo, o score segue so compatibilidade + ocasiao.
+    pesos = PESOS["compatibilidade"] + PESOS["ocasiao"]
+    for l in sem:
+        d = l["detalhes"]
+        esperado = (d["compatibilidade"] * PESOS["compatibilidade"] + d["ocasiao"] * PESOS["ocasiao"]) / pesos
+        assert l["score"] == pytest.approx(esperado, abs=1e-3)
+
+
+def test_periodo_desconhecido_da_erro_fora_da_api(pecas):
+    with pytest.raises(KeyError):
+        recomendar(_pecas_modelo(pecas), periodo="Noite")
+
+
 def test_frio_nao_sugere_short(cliente, pecas):
     looks = _recomendar(cliente, pecas, clima="frio")["looks"]
     assert looks
@@ -142,7 +218,7 @@ def test_peca_com_features_quebradas_e_ignorada_sem_derrubar(cliente, pecas, fea
 
 @pytest.mark.parametrize(
     "campo, valor",
-    [("ocasiao", "balada"), ("clima", "neve"), ("top_k", 0), ("top_k", 51)],
+    [("ocasiao", "balada"), ("clima", "neve"), ("periodo", "madrugada"), ("top_k", 0), ("top_k", 51)],
 )
 def test_pedido_invalido_da_422(cliente, pecas, campo, valor):
     resposta = cliente.post("/looks/recommend", json={"pecas": pecas, campo: valor})

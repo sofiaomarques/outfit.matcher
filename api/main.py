@@ -37,7 +37,7 @@ from features.categoria import carregar_modelo_categoria
 from features.embedding_neural import VERSAO_FEATURES, gerar_embedding_completo
 from features.recorte import recortar_peca
 from model.feedback import Feedback
-from model.recomendar import CLIMAS, OCASIOES, carregar_modelo_match, peca_de_features, recomendar
+from model.recomendar import CLIMAS, OCASIOES, PERIODOS, carregar_modelo_match, peca_de_features, recomendar
 
 log = logging.getLogger("uvicorn.error")
 
@@ -293,6 +293,7 @@ class PedidoRecomendacao(BaseModel):
     pecas: list[PecaGuardaRoupa] = Field(max_length=MAX_PECAS)
     ocasiao: Literal[tuple(OCASIOES)] | None = None  # type: ignore[valid-type]
     clima: Literal[tuple(CLIMAS)] | None = None  # type: ignore[valid-type]
+    periodo: Literal[tuple(PERIODOS)] | None = None  # type: ignore[valid-type]
     top_k: int = Field(default=12, ge=1, le=50)
     # Favoritos, rejeicoes e usos do app (tabelas outfit_*), no formato de
     # Feedback.de_dict (model/feedback.py).
@@ -319,6 +320,7 @@ def recommend_looks(pedido: PedidoRecomendacao) -> dict:
         pecas,
         ocasiao=pedido.ocasiao,
         clima=pedido.clima,
+        periodo=pedido.periodo,
         top_k=pedido.top_k,
         feedback=feedback,
     )
