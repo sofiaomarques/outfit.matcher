@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Card } from '../components/Card';
 import { GridList } from '../components/GridList';
 import { StatusMessage } from '../components/StatusMessage';
+import { useToast } from '../components/Toast';
 import type { WishlistItem } from '../models/wishlistItem';
 import { WishlistRepository } from '../repositories/wishlistRepository';
 import { colors } from '../theme/colors';
@@ -20,6 +21,7 @@ type WishlistStore = Pick<WishlistRepository, 'fetchItems' | 'addItem' | 'delete
  */
 export function WishlistScreen({ repository }: { repository?: WishlistStore }) {
   const repo = useMemo(() => repository ?? new WishlistRepository(), [repository]);
+  const toast = useToast();
   const [items, setItems] = useState<WishlistItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,12 +51,19 @@ export function WishlistScreen({ repository }: { repository?: WishlistStore }) {
   }, [load]);
 
   async function deleteItem(item: WishlistItem) {
-    const previous = items;
+    const index = items.findIndex((i) => i.id === item.id);
     setItems((current) => current.filter((i) => i.id !== item.id));
     try {
       await repo.deleteItem(item);
     } catch {
-      if (mounted.current) setItems(previous);
+      if (!mounted.current) return;
+      // Devolve só este item (na posição de antes), sem desfazer outras remoções.
+      setItems((current) => {
+        const next = [...current];
+        next.splice(Math.min(index, next.length), 0, item);
+        return next;
+      });
+      toast('Não foi possível remover. Tente de novo.');
     }
   }
 

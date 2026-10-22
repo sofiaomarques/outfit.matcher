@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import type { WishlistItem } from '../models/wishlistItem';
 import { renderScreen } from '../test/render';
@@ -60,6 +60,24 @@ test('se apagar falha, o item volta', async () => {
   await fireEvent.press(screen.getAllByLabelText('Remover da wishlist')[0]);
 
   expect(await screen.findByText('Vestido floral')).toBeTruthy();
+  expect(screen.getByText('Não foi possível remover. Tente de novo.')).toBeTruthy();
+});
+
+test('se apagar um falha, não traz de volta outro já removido', async () => {
+  const repo = makeRepo(ITEMS);
+  let rejectFirst: (e: Error) => void = () => {};
+  repo.deleteItem.mockImplementationOnce(() => new Promise((_, reject) => (rejectFirst = reject)));
+  await renderScreen(<WishlistScreen repository={repo} />);
+  await screen.findByText('Vestido floral');
+
+  fireEvent.press(screen.getAllByLabelText('Remover da wishlist')[0]);
+  await waitFor(() => expect(screen.queryByText('Vestido floral')).toBeNull());
+  fireEvent.press(screen.getAllByLabelText('Remover da wishlist')[0]);
+  await waitFor(() => expect(repo.deleteItem).toHaveBeenCalledTimes(2));
+  await act(async () => rejectFirst(new Error('offline')));
+
+  expect(await screen.findByText('Vestido floral')).toBeTruthy();
+  expect(screen.queryByText('Bota preta')).toBeNull();
 });
 
 test('o botão + abre o cadastro e, ao salvar, recarrega a lista', async () => {
