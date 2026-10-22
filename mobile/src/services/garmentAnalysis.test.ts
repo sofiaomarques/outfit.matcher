@@ -65,11 +65,14 @@ test('recortarPeca devolve os bytes do PNG', async () => {
 });
 
 describe('featuresOrSkip', () => {
-  const wakingApi = () => {
-    const api = new ApiStatus({ baseUrl: 'http://api.test', fetchFn: async () => new Response('', { status: 503 }), backoffMs: () => 5, wakeDeadlineMs: 50 });
-    api.ensureReady().catch(() => {});
-    return api;
-  };
+  /** Espera a condição virar verdadeira, sem depender de um tempo fixo. */
+  async function waitUntil(condition: () => boolean, timeoutMs = 1000) {
+    const start = Date.now();
+    while (!condition()) {
+      if (Date.now() - start > timeoutMs) throw new Error('a condição não ficou verdadeira');
+      await new Promise((r) => setTimeout(r, 1));
+    }
+  }
 
   test('devolve as features quando a análise termina', async () => {
     const api = new ApiStatus({ baseUrl: 'http://api.test' });
@@ -78,12 +81,19 @@ describe('featuresOrSkip', () => {
   });
 
   test('com a API acordando, não espera a análise', async () => {
-    const api = wakingApi();
-    await new Promise((r) => setTimeout(r, 1));
-    // Agora 'checking'; força 'waking' esperando o 503.
-    await new Promise((r) => setTimeout(r, 20));
+    // O /health responde 503 (proxy ainda subindo): o estado vira "waking".
+    const api = new ApiStatus({
+      baseUrl: 'http://api.test',
+      fetchFn: async () => new Response('', { status: 503 }),
+      backoffMs: () => 5,
+      wakeDeadlineMs: 300,
+    });
+    const wake = api.ensureReady().catch(() => {});
+    await waitUntil(() => api.isWaking);
+
     const never = new Promise<Features | null>(() => {});
     expect(await featuresOrSkip(api, never)).toEqual({ features: null, skipped: true });
+    await wake;
   });
 });
 
