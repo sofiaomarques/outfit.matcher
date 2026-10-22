@@ -1,5 +1,5 @@
 """Recomendador de looks: monta as combinacoes possiveis do guarda-roupa da
-usuaria e ordena por compatibilidade + ocasiao + clima, com variedade entre
+usuaria e ordena por compatibilidade + ocasiao + clima + periodo, com variedade entre
 os looks do topo.
 
 O modelo de pares (model/treinar.py) so responde "essa peca de cima combina
@@ -13,7 +13,7 @@ com essa de baixo?". O resto e responsabilidade daqui:
    filtros sao relaxados e so a penalidade suave vale;
 3. score = media ponderada de compatibilidade (modelo), ocasiao (CLIP:
    similaridade entre a foto de cada peca e frases como "roupa de
-   escritorio") e clima (ajuste por categoria) e periodo (noite: bonus pra cor
+   escritorio"), clima (ajuste por categoria) e periodo (noite: bonus pra cor
    escura e peca arrumada);
 4. feedback (model/feedback.py): look rejeitado na ocasiao some, pares de
    pecas favoritados/rejeitados somam/tiram pontos e look usado ha poucos
@@ -131,7 +131,8 @@ class Periodo:
 
     peso_escuro: float  # parte do score vinda da cor da peca
     peso_arrumado: float  # parte vinda dos contextos "arrumados" do CLIP
-    contextos_arrumados: frozenset[str] = frozenset({"trabalho", "festa", "encontro"})
+    # Sem "trabalho": roupa de escritorio nao e roupa de noite.
+    contextos_arrumados: frozenset[str] = frozenset({"festa", "encontro"})
 
 
 # tonalidade (indice 6 do embedding * 3): 0 clara, 1 media, 2 escura.
@@ -154,13 +155,13 @@ OCASIOES = {
     "festa": Ocasiao(frozenset({"festa", "encontro"})),
 }
 
-# Calor nunca gera looks com camada; jaqueta/casaco so aparecem quando fazem
-# o papel da peca de cima (ver _gerar_candidatos), e ai penalizados.
 # "dia" nao tem ajuste: e o comportamento padrao.
 PERIODOS = {
     "noite": Periodo(peso_escuro=0.5, peso_arrumado=0.5),
 }
 
+# Calor nunca gera looks com camada; jaqueta/casaco so aparecem quando fazem
+# o papel da peca de cima (ver _gerar_candidatos), e ai penalizados.
 CLIMAS = {
     "calor": Clima(
         "nunca",
@@ -331,29 +332,43 @@ def probabilidades_contextos(embeddings: np.ndarray) -> dict[str, np.ndarray]:
     return {nome: probs[:, i] for i, nome in enumerate(nomes)}
 
 
-def _ajustes_ocasiao(pecas: list[Peca], ocasiao: Ocasiao) -> dict[str, float]:
+def _soma_contextos(por_contexto: dict[str, np.ndarray], contextos: frozenset[str]) -> np.ndarray:
+    """Probabilidade somada dos `contextos` pra cada peca (saida de
+    probabilidades_contextos)."""
+    return sum((por_contexto[c] for c in contextos), np.zeros_like(por_contexto["casual"]))
+
+
+def _ajustes_ocasiao(
+    pecas: list[Peca], ocasiao: Ocasiao, por_contexto: dict[str, np.ndarray]
+) -> dict[str, float]:
     """Adequacao (0-1) de cada peca a ocasiao (soma das probabilidades dos
     contextos que servem pra ela)."""
-    nomes = list(CONTEXTOS_CLIP)
-    por_contexto = probabilidades_contextos(np.stack([p.embedding for p in pecas]))
-    probs = np.stack([por_contexto[n] for n in nomes], axis=1)
-    colunas = [nomes.index(c) for c in ocasiao.contextos]
-    aceitos = probs[:, colunas].sum(axis=1)
+    aceitos = _soma_contextos(por_contexto, ocasiao.contextos)
     return {p.id: min(1.0, float(a) / LIMIAR_OCASIAO) for p, a in zip(pecas, aceitos)}
 
 
-def _ajustes_periodo(pecas: list[Peca], periodo: Periodo) -> dict[str, float]:
+def _ajustes_periodo(
+    pecas: list[Peca],
+    periodo: Periodo,
+    por_contexto: dict[str, np.ndarray],
+    ocasiao: Ocasiao | None = None,
+) -> dict[str, float]:
     """Adequacao (0-1) de cada peca ao periodo: cor escura + quanto a peca
-    parece arrumada (soma das probabilidades dos contextos arrumados)."""
-    por_contexto = probabilidades_contextos(np.stack([p.embedding for p in pecas]))
-    arrumado = sum(por_contexto[n] for n in periodo.contextos_arrumados)
-    total = periodo.peso_escuro + periodo.peso_arrumado
+    parece arrumada (probabilidade dos contextos arrumados).
+
+    A parte arrumada usa a probabilidade crua, sem LIMIAR_OCASIAO: somando
+    dois contextos, o limiar ja e atingido por roupa comum (jeans, camisa) e
+    tudo empataria em 1. Contextos que a ocasiao ja pontua ficam de fora pra
+    nao contar o mesmo sinal duas vezes (festa a noite: so a cor pesa)."""
+    contextos = periodo.contextos_arrumados - (ocasiao.contextos if ocasiao else frozenset())
+    peso_arrumado = periodo.peso_arrumado if contextos else 0.0
+    arrumado = _soma_contextos(por_contexto, contextos)
+    total = periodo.peso_escuro + peso_arrumado
     ajustes = {}
     for peca, arrumada in zip(pecas, arrumado):
         tonalidade = int(round(float(peca.embedding[6]) * 3))
         escuridao = ESCURIDAO_POR_TONALIDADE.get(tonalidade, 0.6)
-        arrumada = min(1.0, float(arrumada) / LIMIAR_OCASIAO)
-        ajustes[peca.id] = (periodo.peso_escuro * escuridao + periodo.peso_arrumado * arrumada) / total
+        ajustes[peca.id] = (periodo.peso_escuro * escuridao + peso_arrumado * float(arrumada)) / total
     return ajustes
 
 
@@ -437,7 +452,7 @@ def recomendar(
     ajuste_feedback = AjusteFeedback(feedback, ocasiao) if feedback else None
     regra_ocasiao = OCASIOES[ocasiao] if ocasiao else None
     regra_clima = CLIMAS[clima] if clima else None
-    regra_periodo = PERIODOS.get(periodo) if periodo else None
+    regra_periodo = PERIODOS[periodo] if periodo else None
 
     candidatos = _gerar_candidatos(pecas, regra_clima)
     permitidos = [look for look in candidatos if _permitido(look, regra_ocasiao, regra_clima)]
@@ -462,8 +477,15 @@ def recomendar(
         pesos["periodo"] = PESOS["periodo"]
     total = sum(pesos.values())
 
-    ajuste_por_peca = _ajustes_ocasiao(pecas, regra_ocasiao) if regra_ocasiao else {}
-    ajuste_periodo = _ajustes_periodo(pecas, regra_periodo) if regra_periodo else {}
+    por_contexto = (
+        probabilidades_contextos(np.stack([p.embedding for p in pecas]))
+        if regra_ocasiao or regra_periodo
+        else {}
+    )
+    ajuste_por_peca = _ajustes_ocasiao(pecas, regra_ocasiao, por_contexto) if regra_ocasiao else {}
+    ajuste_periodo = (
+        _ajustes_periodo(pecas, regra_periodo, por_contexto, regra_ocasiao) if regra_periodo else {}
+    )
     looks = []
     for look_pecas, compat in zip(candidatos, _compatibilidades(candidatos, checkpoint_path)):
         look = Look(pecas=look_pecas, compatibilidade=compat)
