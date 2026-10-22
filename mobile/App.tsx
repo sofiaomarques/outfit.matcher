@@ -8,11 +8,12 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppShell, appDestinations } from './src/components/AppShell';
 import { ToastProvider } from './src/components/Toast';
 import { AuthScreen } from './src/screens/AuthScreen';
+import { FavoritesScreen } from './src/screens/FavoritesScreen';
 import { LooksScreen } from './src/screens/LooksScreen';
 import { NewLookScreen } from './src/screens/NewLookScreen';
-import { PlaceholderScreen } from './src/screens/PlaceholderScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { WardrobeScreen } from './src/screens/WardrobeScreen';
+import { WishlistScreen } from './src/screens/WishlistScreen';
 import { isSupabaseConfigured } from './src/services/apiConfig';
 import { apiStatus } from './src/services/apiStatus';
 import { displayNameOf } from './src/services/currentUser';
@@ -114,11 +115,13 @@ function RootNavigator() {
             <NewLookScreen displayName={displayNameOf(session.user)} />
           ) : index === 2 ? (
             <LooksScreen />
+          ) : index === 3 ? (
+            <WishlistScreen />
+          ) : index === 4 ? (
+            <FavoritesScreen />
           ) : index === appDestinations.length - 1 ? (
             <SettingsScreen onDataErased={onDataErased} />
-          ) : (
-            <PlaceholderScreen title={destination.label} />
-          )}
+          ) : null}
         </View>
       ))}
     </AppShell>
