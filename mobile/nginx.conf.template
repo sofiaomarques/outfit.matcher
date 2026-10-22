@@ -1,0 +1,46 @@
+# Servidor estático do site (build do `expo export --platform web`).
+# A imagem oficial do nginx passa este arquivo por envsubst na subida, então
+# ${PORT} vira a porta que o Cloud Run manda (8080 por padrão).
+server {
+    listen ${PORT};
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml font/ttf;
+    gzip_min_length 1024;
+
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+    add_header X-Frame-Options DENY always;
+
+    # Arquivos com hash no nome (JS, fontes, imagens): cache longo.
+    location /_expo/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header X-Content-Type-Options nosniff always;
+        try_files $uri =404;
+    }
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header X-Content-Type-Options nosniff always;
+        try_files $uri =404;
+    }
+
+    # Verificação de saúde (sem passar pelo fallback do app).
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok";
+    }
+
+    # O app é uma página só: qualquer outra rota cai no index.html, que não
+    # pode ficar em cache (aponta pros arquivos novos a cada deploy).
+    location / {
+        add_header Cache-Control "no-cache";
+        add_header X-Content-Type-Options nosniff always;
+        add_header Referrer-Policy strict-origin-when-cross-origin always;
+        add_header X-Frame-Options DENY always;
+        try_files $uri $uri/ /index.html;
+    }
+}
