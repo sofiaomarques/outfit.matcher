@@ -4,8 +4,20 @@
     {
       "name": "outfit-matcher-web",
       "runtimeExecutable": "bash",
-      "runtimeArgs": ["-c", "cd app && flutter run -d web-server --web-port 5858"],
+      "runtimeArgs": [
+        "-c",
+        "cd app && flutter run -d web-server --web-port 5858"
+      ],
       "port": 5858
+    },
+    {
+      "name": "mobile-web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd mobile && CI=1 npx expo start --web --port 8099"
+      ],
+      "port": 8099
     }
   ]
 }
