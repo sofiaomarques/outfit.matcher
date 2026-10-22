@@ -6,10 +6,14 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AppShell, appDestinations } from './src/components/AppShell';
+import { ToastProvider } from './src/components/Toast';
 import { AuthScreen } from './src/screens/AuthScreen';
 import { PlaceholderScreen } from './src/screens/PlaceholderScreen';
+import { SettingsScreen } from './src/screens/SettingsScreen';
+import { WardrobeScreen } from './src/screens/WardrobeScreen';
 import { isSupabaseConfigured } from './src/services/apiConfig';
 import { apiStatus } from './src/services/apiStatus';
+import { outfitHistory } from './src/services/outfitHistory';
 import { supabase } from './src/services/supabase';
 import { colors } from './src/theme/colors';
 import { fontAssets, text } from './src/theme/fonts';
@@ -25,7 +29,9 @@ export default function App() {
           <ActivityIndicator color={colors.wine} />
         </View>
       ) : isSupabaseConfigured ? (
-        <RootNavigator />
+        <ToastProvider>
+          <RootNavigator />
+        </ToastProvider>
       ) : (
         <MissingConfigScreen />
       )}
@@ -53,6 +59,9 @@ function MissingConfigScreen() {
 function RootNavigator() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  // Muda depois de "Apagar meus dados": a key nova recria as outras telas,
+  // que carregam de novo (agora vazias).
+  const [dataVersion, setDataVersion] = useState(0);
 
   useEffect(() => {
     supabase.auth
@@ -62,8 +71,11 @@ function RootNavigator() {
       .catch(() => setSession(null));
     const { data } = supabase.auth.onAuthStateChange((event, next) => {
       setSession(next);
-      // A próxima conta não herda a aba aberta.
-      if (event === 'SIGNED_OUT') setSelectedIndex(0);
+      if (event === 'SIGNED_OUT') {
+        // A próxima conta não herda o histórico de looks nem a aba aberta.
+        outfitHistory.reset();
+        setSelectedIndex(0);
+      }
     });
     return () => data.subscription.unsubscribe();
   }, []);
@@ -83,13 +95,35 @@ function RootNavigator() {
   }
   if (session === null) return <AuthScreen />;
 
+  function onDataErased() {
+    setDataVersion((v) => v + 1);
+    outfitHistory.reset();
+    outfitHistory.load().catch(() => {});
+  }
+
   return (
     <AppShell selectedIndex={selectedIndex} onDestinationSelected={setSelectedIndex}>
-      <PlaceholderScreen title={appDestinations[selectedIndex].label} />
+      {/* Todas ficam montadas (como o IndexedStack do Flutter): trocar de aba não recarrega. */}
+      {appDestinations.map((destination, index) => (
+        <View
+          key={`${destination.label}-${dataVersion}`}
+          style={[styles.pane, index !== selectedIndex && styles.hidden]}
+        >
+          {index === 0 ? (
+            <WardrobeScreen />
+          ) : index === appDestinations.length - 1 ? (
+            <SettingsScreen onDataErased={onDataErased} />
+          ) : (
+            <PlaceholderScreen title={destination.label} />
+          )}
+        </View>
+      ))}
     </AppShell>
   );
 }
 
 const styles = StyleSheet.create({
+  pane: { flex: 1 },
+  hidden: { display: 'none' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.cream },
 });
