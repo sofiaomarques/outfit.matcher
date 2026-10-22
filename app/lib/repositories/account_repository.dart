@@ -12,51 +12,102 @@ class AccountRepository {
 
   final SupabaseClient _client;
 
-  static const _tables = [
-    'clothing_items',
-    'wishlist_items',
-    'outfit_favorites',
-    'outfit_wears',
-    'outfit_rejections',
-  ];
-  static const _buckets = ['clothing-images', 'wishlist-images'];
-
-  /// Tabela que não existe: PostgREST 12+ e o código do Postgres, que as
-  /// versões antigas repassavam.
-  static const _tableNotFound = {'PGRST205', '42P01'};
-
   String? get email => _client.auth.currentUser?.email;
 
   Future<void> signOut() => _client.auth.signOut();
 
   /// Apaga as peças, a wishlist, os favoritos, os usos e as rejeições, e
-  /// depois as fotos dos dois buckets. As linhas vão primeiro: se as fotos
-  /// falharem no meio, tentar de novo termina o serviço, porque as fotos
-  /// são listadas direto do Storage (pega até foto sem linha).
+  /// depois as fotos dos dois buckets (ver [eraseUserData]). Lança
+  /// [EraseFailure] se não terminar.
   Future<void> eraseMyData() async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) throw StateError('Usuário não autenticado.');
 
-    for (final table in _tables) {
-      try {
-        await _client.from(table).delete().eq('user_id', userId);
-      } on PostgrestException catch (e) {
-        // Tabela que ainda não foi criada no projeto (ex.: a de rejeições,
-        // mais nova): não tem o que apagar nela.
-        if (!_tableNotFound.contains(e.code)) rethrow;
-      }
-    }
-    for (final bucket in _buckets) {
-      final storage = _client.storage.from(bucket);
-      await removeAllFiles(
-        list: () async => [
-          for (final file in await storage.list(path: userId))
-            // Sem id = pasta, não arquivo.
-            if (file.id != null) '$userId/${file.name}',
-        ],
-        remove: (paths) async => (await storage.remove(paths)).length,
-      );
-    }
+    await eraseUserData(
+      userId: userId,
+      deleteRows: (table) => _client.from(table).delete().eq('user_id', userId),
+      listFiles: (bucket) async => [
+        for (final file
+            in await _client.storage.from(bucket).list(path: userId))
+          // Sem id = pasta, não arquivo.
+          if (file.id != null) '$userId/${file.name}',
+      ],
+      removeFiles: (bucket, paths) async =>
+          (await _client.storage.from(bucket).remove(paths)).length,
+    );
+  }
+}
+
+const _tables = [
+  'clothing_items',
+  'wishlist_items',
+  'outfit_favorites',
+  'outfit_wears',
+  'outfit_rejections',
+];
+
+/// Tabelas mais novas, que podem não existir num projeto antigo: não ter a
+/// tabela é não ter o que apagar. Nas outras, a falta é erro de verdade.
+const _optionalTables = {'outfit_rejections'};
+
+const _buckets = ['clothing-images', 'wishlist-images'];
+
+/// Tabela que não existe: PostgREST 12+ e o código do Postgres, que as
+/// versões antigas repassavam.
+const _tableNotFound = {'PGRST205', '42P01'};
+
+/// "Apagar meus dados" não terminou. [partial] diz se algo já foi apagado
+/// antes da falha, pra as telas só recarregarem quando mudou alguma coisa.
+class EraseFailure implements Exception {
+  EraseFailure(this.cause, {required this.partial});
+
+  final Object cause;
+  final bool partial;
+
+  @override
+  String toString() => 'EraseFailure(partial: $partial): $cause';
+}
+
+/// As linhas vão primeiro, todas ao mesmo tempo, e depois as fotos dos dois
+/// buckets: se as fotos falharem no meio, tentar de novo termina o serviço,
+/// porque as fotos são listadas direto do Storage (pega até foto sem linha).
+/// Não é atômico: tornar isso atômico exigiria uma função `security definer`
+/// no banco.
+Future<void> eraseUserData({
+  required String userId,
+  required Future<void> Function(String table) deleteRows,
+  required Future<List<String>> Function(String bucket) listFiles,
+  required Future<int> Function(String bucket, List<String> paths) removeFiles,
+}) async {
+  var progressed = false;
+  try {
+    await Future.wait([
+      for (final table in _tables)
+        () async {
+          try {
+            await deleteRows(table);
+            progressed = true;
+          } on PostgrestException catch (e) {
+            if (!_optionalTables.contains(table) ||
+                !_tableNotFound.contains(e.code)) {
+              rethrow;
+            }
+          }
+        }(),
+    ]);
+    await Future.wait([
+      for (final bucket in _buckets)
+        removeAllFiles(
+          list: () => listFiles(bucket),
+          remove: (paths) async {
+            final removed = await removeFiles(bucket, paths);
+            if (removed > 0) progressed = true;
+            return removed;
+          },
+        ),
+    ]);
+  } catch (e) {
+    throw EraseFailure(e, partial: progressed);
   }
 }
 

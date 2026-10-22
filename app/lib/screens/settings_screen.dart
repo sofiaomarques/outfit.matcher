@@ -34,7 +34,6 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   // Criado só no primeiro uso: `Supabase.instance` não existe nos testes.
   late final _repository = widget.repository ?? AccountRepository();
-  bool _isErasing = false;
 
   Future<void> _signOut() async {
     try {
@@ -69,7 +68,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     if (confirmed != true || !mounted) return;
 
-    setState(() => _isErasing = true);
     // Tampa o app inteiro (inclusive a navegação) enquanto apaga: uma peça
     // adicionada no meio ficaria com a linha, mas sem a foto.
     final navigator = Navigator.of(context, rootNavigator: true);
@@ -79,20 +77,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (_) => const PopScope(canPop: false, child: _ErasingDialog()),
     ).ignore();
     String message;
+    // Se falhou no meio, parte já pode ter sido apagada: as outras telas
+    // recarregam pra não mostrar o que não existe mais. Se nada foi apagado,
+    // elas ficam como estão (a usuária não perde o que estava montando).
+    var reload = true;
     try {
       await _repository.eraseMyData();
       message = 'Pronto: seus dados e fotos foram apagados.';
-    } catch (_) {
+    } catch (e) {
+      reload = e is! EraseFailure || e.partial;
       message =
           'Não foi possível apagar tudo. Tente de novo: o que já foi apagado '
           'não volta.';
     }
     navigator.pop();
-    // Mesmo se falhou no meio, parte já pode ter sido apagada: as outras
-    // telas recarregam pra não mostrar o que não existe mais.
-    widget.onDataErased();
-    if (!mounted) return;
-    setState(() => _isErasing = false);
+    if (reload) widget.onDataErased();
     _showMessage(message);
   }
 
@@ -147,7 +146,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ListTile(
                   leading: const Icon(Icons.logout, color: AppColors.wine),
                   title: const Text('Sair'),
-                  onTap: _isErasing ? null : _signOut,
+                  onTap: _signOut,
                 ),
               ],
             ),
@@ -156,21 +155,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _SectionTitle('Seus dados'),
           Card(
             child: ListTile(
-              leading: _isErasing
-                  ? const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.delete_outline, color: AppColors.error),
-              title: Text(
-                _isErasing ? 'Apagando...' : 'Apagar meus dados',
-                style: const TextStyle(color: AppColors.error),
+              leading: const Icon(Icons.delete_outline, color: AppColors.error),
+              title: const Text(
+                'Apagar meus dados',
+                style: TextStyle(color: AppColors.error),
               ),
               subtitle: const Text(
                 'Peças, wishlist, looks e todas as fotos enviadas',
               ),
-              onTap: _isErasing ? null : _confirmErase,
+              onTap: _confirmErase,
             ),
           ),
           const SizedBox(height: 24),

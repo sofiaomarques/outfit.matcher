@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:outfit_matcher/repositories/account_repository.dart';
 import 'package:outfit_matcher/screens/settings_screen.dart';
@@ -12,6 +13,8 @@ class _FakeAccount implements AccountRepository {
   @override
   String? email = 'ana@exemplo.com';
   bool fail = false;
+  // Quando o apagar falha: se algo já tinha sido apagado.
+  bool partial = true;
   int signOuts = 0;
   int erases = 0;
   // Se definido, o apagar só termina quando ele completar.
@@ -26,7 +29,7 @@ class _FakeAccount implements AccountRepository {
   @override
   Future<void> eraseMyData() async {
     await gate?.future;
-    if (fail) throw Exception('offline');
+    if (fail) throw EraseFailure(Exception('offline'), partial: partial);
     erases++;
   }
 }
@@ -166,6 +169,112 @@ void main() {
     );
     // O botão volta a funcionar pra tentar de novo.
     expect(find.text('Apagar meus dados'), findsOneWidget);
+  });
+
+  testWidgets('se nada foi apagado, falha sem recarregar as telas', (
+    tester,
+  ) async {
+    account
+      ..fail = true
+      ..partial = false;
+    await pumpSettings(tester);
+
+    await tapErase(tester);
+    await tester.tap(find.text('Apagar tudo'));
+    await tester.pumpAndSettle();
+
+    expect(erasedCallbacks, 0);
+    expect(
+      find.textContaining('Não foi possível apagar tudo.'),
+      findsOneWidget,
+    );
+  });
+
+  group('eraseUserData', () {
+    late Set<String> deleted;
+    late Map<String, List<String>> files;
+
+    setUp(() {
+      deleted = {};
+      files = {
+        'clothing-images': ['u/a.jpg', 'u/b.jpg'],
+        'wishlist-images': ['u/c.jpg'],
+      };
+    });
+
+    Future<void> erase({
+      Future<void> Function(String table)? deleteRows,
+      Future<int> Function(String bucket, List<String> paths)? removeFiles,
+    }) {
+      return eraseUserData(
+        userId: 'u',
+        deleteRows: deleteRows ?? (table) async => deleted.add(table),
+        listFiles: (bucket) async => List.of(files[bucket]!),
+        removeFiles:
+            removeFiles ??
+            (bucket, paths) async {
+              files[bucket]!.removeWhere(paths.contains);
+              return paths.length;
+            },
+      );
+    }
+
+    test('apaga as 5 tabelas e as fotos dos dois buckets', () async {
+      await erase();
+
+      expect(deleted, {
+        'clothing_items',
+        'wishlist_items',
+        'outfit_favorites',
+        'outfit_wears',
+        'outfit_rejections',
+      });
+      expect(files.values.every((paths) => paths.isEmpty), isTrue);
+    });
+
+    test('tabela nova que não existe é pulada', () async {
+      await erase(
+        deleteRows: (table) async {
+          if (table == 'outfit_rejections') {
+            throw const PostgrestException(message: 'x', code: 'PGRST205');
+          }
+          deleted.add(table);
+        },
+      );
+
+      expect(deleted, hasLength(4));
+      expect(files['clothing-images'], isEmpty);
+    });
+
+    test('tabela principal que não existe é erro', () async {
+      await expectLater(
+        erase(
+          deleteRows: (table) async {
+            if (table == 'clothing_items') {
+              throw const PostgrestException(message: 'x', code: 'PGRST205');
+            }
+            deleted.add(table);
+          },
+        ),
+        throwsA(isA<EraseFailure>().having((e) => e.partial, 'partial', true)),
+      );
+      // As fotos só são apagadas depois das linhas.
+      expect(files['clothing-images'], hasLength(2));
+    });
+
+    test('falha antes de apagar qualquer coisa não é parcial', () async {
+      await expectLater(
+        erase(deleteRows: (_) async => throw Exception('offline')),
+        throwsA(isA<EraseFailure>().having((e) => e.partial, 'partial', false)),
+      );
+    });
+
+    test('falha no Storage depois das linhas é parcial', () async {
+      await expectLater(
+        erase(removeFiles: (_, _) async => 0),
+        throwsA(isA<EraseFailure>().having((e) => e.partial, 'partial', true)),
+      );
+    });
   });
 
   group('removeAllFiles', () {
