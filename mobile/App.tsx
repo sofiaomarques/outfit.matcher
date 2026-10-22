@@ -8,12 +8,16 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppShell, appDestinations } from './src/components/AppShell';
 import { ToastProvider } from './src/components/Toast';
 import { AuthScreen } from './src/screens/AuthScreen';
+import { LooksScreen } from './src/screens/LooksScreen';
+import { NewLookScreen } from './src/screens/NewLookScreen';
 import { PlaceholderScreen } from './src/screens/PlaceholderScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { WardrobeScreen } from './src/screens/WardrobeScreen';
 import { isSupabaseConfigured } from './src/services/apiConfig';
 import { apiStatus } from './src/services/apiStatus';
+import { displayNameOf } from './src/services/currentUser';
 import { outfitHistory } from './src/services/outfitHistory';
+import { RecommendationService } from './src/services/recommendation';
 import { supabase } from './src/services/supabase';
 import { colors } from './src/theme/colors';
 import { fontAssets, text } from './src/theme/fonts';
@@ -74,6 +78,7 @@ function RootNavigator() {
       if (event === 'SIGNED_OUT') {
         // A próxima conta não herda o histórico de looks nem a aba aberta.
         outfitHistory.reset();
+        RecommendationService.reset();
         setSelectedIndex(0);
       }
     });
@@ -98,6 +103,7 @@ function RootNavigator() {
   function onDataErased() {
     setDataVersion((v) => v + 1);
     outfitHistory.reset();
+    RecommendationService.reset();
     outfitHistory.load().catch(() => {});
   }
 
@@ -111,6 +117,10 @@ function RootNavigator() {
         >
           {index === 0 ? (
             <WardrobeScreen />
+          ) : index === 1 ? (
+            <NewLookScreen displayName={displayNameOf(session.user)} />
+          ) : index === 2 ? (
+            <LooksScreen />
           ) : index === appDestinations.length - 1 ? (
             <SettingsScreen onDataErased={onDataErased} />
           ) : (
