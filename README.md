@@ -373,7 +373,10 @@ Os dois são concatenados em um vetor de **523 dimensões** que representa cada 
 
 ## 📱 Interface
 
-A interface (web + iOS + Android) fica em [`app/`](app/), construída em Flutter.
+A interface (web + iOS + Android) está sendo migrada de Flutter ([`app/`](app/))
+para Expo/React Native em [`mobile/`](mobile/README.md), que também gera o site
+(imagem pro Cloud Run em `mobile/Dockerfile`). Enquanto a migração não termina,
+o Flutter segue como referência.
 O guarda-roupa fica no Supabase; a análise das fotos e as sugestões de look
 vêm da API acima — veja [`app/README.md`](app/README.md) pra rodar.
 

@@ -6,6 +6,12 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-c", "cd app && flutter run -d web-server --web-port 5858"],
       "port": 5858
+    },
+    {
+      "name": "mobile-web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd mobile && npx expo start --web --port 8088"],
+      "port": 8088
     }
   ]
 }

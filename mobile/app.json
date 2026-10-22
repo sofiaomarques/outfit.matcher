@@ -19,7 +19,15 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png",
+      "name": "Wable",
+      "shortName": "Wable",
+      "description": "Seu guarda-roupa, mais inteligente.",
+      "lang": "pt-BR",
+      "backgroundColor": "#FDF6EC",
+      "themeColor": "#7A1836"
     },
     "plugins": [
       "expo-font",
