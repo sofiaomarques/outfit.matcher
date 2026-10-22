@@ -154,7 +154,11 @@ export function NewLookScreen({ displayName = '', recommender, history = outfitH
     toast(`Não vamos mais sugerir esse look pra ${label.toLowerCase()}.`, {
       label: 'Desfazer',
       onPress: async () => {
-        if ((await history.undoReject(outfit, key)) && mounted.current) restoreLook(outfit, label);
+        if (!(await history.undoReject(outfit, key)) || !mounted.current) return;
+        const now = latest.current;
+        // Pedindo novos looks (era a última sugestão): refaz o pedido, agora sem a rejeição.
+        if (now.loading && now.occasion === label && items) recommend(items, label);
+        else restoreLook(outfit, label);
       },
     });
     if (remaining.length === 0 && !latest.current.loading && items) recommend(items, label);

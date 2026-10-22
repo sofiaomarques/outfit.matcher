@@ -17,6 +17,7 @@ import { isSupabaseConfigured } from './src/services/apiConfig';
 import { apiStatus } from './src/services/apiStatus';
 import { displayNameOf } from './src/services/currentUser';
 import { outfitHistory } from './src/services/outfitHistory';
+import { RecommendationService } from './src/services/recommendation';
 import { supabase } from './src/services/supabase';
 import { colors } from './src/theme/colors';
 import { fontAssets, text } from './src/theme/fonts';
@@ -73,6 +74,7 @@ function RootNavigator() {
       if (event === 'SIGNED_OUT') {
         // A próxima conta não herda o histórico de looks nem a aba aberta.
         outfitHistory.reset();
+        RecommendationService.reset();
         setSelectedIndex(0);
       }
     });
@@ -97,6 +99,7 @@ function RootNavigator() {
   function onDataErased() {
     setDataVersion((v) => v + 1);
     outfitHistory.reset();
+    RecommendationService.reset();
     outfitHistory.load().catch(() => {});
   }
 

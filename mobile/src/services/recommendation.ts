@@ -75,6 +75,12 @@ export class RecommendationService {
   private static pendingLoad: Promise<ClothingItem[]> | null = null;
   private static progressListeners = new Set<Progress>();
 
+  /** Esquece a carga em andamento (troca de conta / dados apagados): a próxima não herda o guarda-roupa antigo. */
+  static reset(): void {
+    RecommendationService.pendingLoad = null;
+    RecommendationService.progressListeners.clear();
+  }
+
   constructor(
     private readonly repository: WardrobeStore = new WardrobeRepository(),
     private readonly analysis: Pick<GarmentAnalysisService, 'analisarPeca'> = garmentAnalysis,
