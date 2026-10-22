@@ -63,6 +63,9 @@ export function AddItemScreen({ repository, analysisService = garmentAnalysis, o
   // segmentação). Resolve null se a API falhar — a peça é salva mesmo assim.
   const analysis = useRef<Promise<Features | null> | null>(null);
   const mounted = useRef(true);
+  // Numera as escolhas de foto: o recorte de uma foto trocada no meio não pode
+  // sobrescrever a nova.
+  const pickId = useRef(0);
 
   useEffect(() => {
     mounted.current = true;
@@ -77,6 +80,7 @@ export function AddItemScreen({ repository, analysisService = garmentAnalysis, o
     if (picked.status === 'denied') return toast(CAMERA_DENIED_MESSAGE);
     if (picked.status === 'canceled') return;
 
+    const id = ++pickId.current;
     const { photo, bytes: original } = picked;
     setImageBytes(original);
     setPreview(photo.uri);
@@ -85,7 +89,7 @@ export function AddItemScreen({ repository, analysisService = garmentAnalysis, o
 
     try {
       const cropped = await analysisService.recortarPeca(original);
-      if (mounted.current) {
+      if (mounted.current && id === pickId.current) {
         setImageBytes(cropped);
         setPreview(bytesToDataUri(cropped));
       }
@@ -93,7 +97,7 @@ export function AddItemScreen({ repository, analysisService = garmentAnalysis, o
       // Serviço de recorte fora do ar ou falhou: mantém a foto original em
       // vez de travar o cadastro da peça.
     } finally {
-      if (mounted.current) setCropping(false);
+      if (mounted.current && id === pickId.current) setCropping(false);
     }
   }
 
