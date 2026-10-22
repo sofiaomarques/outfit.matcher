@@ -34,6 +34,11 @@ ENV EXPO_PUBLIC_SUPABASE_URL=$EXPO_PUBLIC_SUPABASE_URL \
     EXPO_PUBLIC_FEEDBACK_URL=$EXPO_PUBLIC_FEEDBACK_URL \
     CI=1
 
+# Sem estas o site sobe "quebrado": o valor vazio vence o padrão do código e o
+# erro só aparece em tempo de execução. Melhor falhar o build.
+RUN test -n "$EXPO_PUBLIC_SUPABASE_URL" && test -n "$EXPO_PUBLIC_SUPABASE_ANON_KEY" && test -n "$EXPO_PUBLIC_API_BASE_URL" \
+    || { echo "Faltam --build-arg EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY e EXPO_PUBLIC_API_BASE_URL" >&2; exit 1; }
+
 COPY . .
 RUN npm run build:web
 
@@ -41,5 +46,6 @@ FROM nginx:1.27-alpine
 # Cloud Run manda a porta em $PORT; o nginx lê os templates de /etc/nginx/templates.
 ENV PORT=8080
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+COPY security-headers.conf /etc/nginx/snippets/security-headers.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 8080
