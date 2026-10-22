@@ -55,7 +55,11 @@ function RootNavigator() {
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    supabase.auth
+      .getSession()
+      .then(({ data }) => setSession(data.session))
+      // Sem isso, uma falha ao ler a sessão salva deixaria o spinner pra sempre.
+      .catch(() => setSession(null));
     const { data } = supabase.auth.onAuthStateChange((event, next) => {
       setSession(next);
       // A próxima conta não herda a aba aberta.

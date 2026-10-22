@@ -31,6 +31,17 @@ export function AuthScreen() {
   );
 }
 
+/** Traduz as mensagens mais comuns do Supabase Auth, que chegam em inglês. */
+export function authErrorMessage(message: string): string {
+  const m = message.toLowerCase();
+  if (m.includes('invalid login credentials')) return 'E-mail ou senha incorretos.';
+  if (m.includes('email not confirmed')) return 'Confirme seu e-mail antes de entrar.';
+  if (m.includes('already registered')) return 'Esse e-mail já tem cadastro. Tente entrar.';
+  if (m.includes('rate limit') || m.includes('too many'))
+    return 'Muitas tentativas. Aguarde um pouco e tente de novo.';
+  return message;
+}
+
 /** Mensagem de erro de cada campo, ou null se estiver válido. */
 export function validateAuth(
   fields: { name: string; email: string; password: string },
@@ -84,7 +95,7 @@ function AuthForm({ isSignUp, onBack, onSwitchMode }: AuthFormProps) {
       // Só erro que o servidor devolveu (senha errada...) mostra a mensagem
       // dele; falha de rede (AuthRetryableFetchError) vira o aviso genérico.
       setErrorText(
-        isAuthApiError(e) ? e.message : 'Não foi possível conectar. Tente de novo.',
+        isAuthApiError(e) ? authErrorMessage(e.message) : 'Não foi possível conectar. Tente de novo.',
       );
     } finally {
       setLoading(false);
@@ -131,7 +142,7 @@ function AuthForm({ isSignUp, onBack, onSwitchMode }: AuthFormProps) {
           error={errors.password}
           secureTextEntry
           autoCapitalize="none"
-          autoComplete="password"
+          autoComplete={isSignUp ? 'new-password' : 'current-password'}
         />
 
         {errorText && <Text style={styles.error}>{errorText}</Text>}
