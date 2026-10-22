@@ -13,7 +13,8 @@ com essa de baixo?". O resto e responsabilidade daqui:
    filtros sao relaxados e so a penalidade suave vale;
 3. score = media ponderada de compatibilidade (modelo), ocasiao (CLIP:
    similaridade entre a foto de cada peca e frases como "roupa de
-   escritorio") e clima (ajuste por categoria);
+   escritorio") e clima (ajuste por categoria) e periodo (noite: bonus pra cor
+   escura e peca arrumada);
 4. feedback (model/feedback.py): look rejeitado na ocasiao some, pares de
    pecas favoritados/rejeitados somam/tiram pontos e look usado ha poucos
    dias perde pontos;
@@ -92,7 +93,7 @@ COMPATIBILIDADE_VESTIDO = 0.9
 # Baixo porque o modelo foi treinado com rotulos fracos que reprovam quase
 # todo blazer com jeans (diferenca de formalidade).
 PESO_CAMADA = 0.3
-PESOS = {"compatibilidade": 0.55, "ocasiao": 0.3, "clima": 0.15}
+PESOS = {"compatibilidade": 0.55, "ocasiao": 0.3, "clima": 0.15, "periodo": 0.15}
 PENALIDADE_REPETICAO = 0.1
 # Clima que pede camada mas o look nao tem (usuaria sem jaqueta/casaco).
 FATOR_SEM_CAMADA = 0.6
@@ -123,6 +124,21 @@ class Ocasiao:
 
 
 @dataclass(frozen=True)
+class Periodo:
+    """Modificador da ocasiao (ex.: aniversario a noite). Nao escolhe peca:
+    so da bonus a cor escura e a peca mais arrumada, em tom suave pra quem so
+    tem roupa clara ainda receber sugestao."""
+
+    peso_escuro: float  # parte do score vinda da cor da peca
+    peso_arrumado: float  # parte vinda dos contextos "arrumados" do CLIP
+    contextos_arrumados: frozenset[str] = frozenset({"trabalho", "festa", "encontro"})
+
+
+# tonalidade (indice 6 do embedding * 3): 0 clara, 1 media, 2 escura.
+ESCURIDAO_POR_TONALIDADE = {0: 0.3, 1: 0.6, 2: 1.0}
+
+
+@dataclass(frozen=True)
 class Clima:
     camada: str  # "nunca" | "opcional" | "sempre"
     categorias_proibidas: frozenset[int] = frozenset()
@@ -140,6 +156,11 @@ OCASIOES = {
 
 # Calor nunca gera looks com camada; jaqueta/casaco so aparecem quando fazem
 # o papel da peca de cima (ver _gerar_candidatos), e ai penalizados.
+# "dia" nao tem ajuste: e o comportamento padrao.
+PERIODOS = {
+    "noite": Periodo(peso_escuro=0.5, peso_arrumado=0.5),
+}
+
 CLIMAS = {
     "calor": Clima(
         "nunca",
@@ -178,6 +199,7 @@ class Look:
     compatibilidade: float
     ocasiao: float = 1.0
     clima: float = 1.0
+    periodo: float = 1.0
     feedback: float = 0.0  # ja somado ao score
     score: float = 0.0
 
@@ -189,6 +211,7 @@ class Look:
                 "compatibilidade": round(self.compatibilidade, 4),
                 "ocasiao": round(self.ocasiao, 4),
                 "clima": round(self.clima, 4),
+                "periodo": round(self.periodo, 4),
                 "feedback": round(self.feedback, 4),
             },
         }
@@ -319,6 +342,21 @@ def _ajustes_ocasiao(pecas: list[Peca], ocasiao: Ocasiao) -> dict[str, float]:
     return {p.id: min(1.0, float(a) / LIMIAR_OCASIAO) for p, a in zip(pecas, aceitos)}
 
 
+def _ajustes_periodo(pecas: list[Peca], periodo: Periodo) -> dict[str, float]:
+    """Adequacao (0-1) de cada peca ao periodo: cor escura + quanto a peca
+    parece arrumada (soma das probabilidades dos contextos arrumados)."""
+    por_contexto = probabilidades_contextos(np.stack([p.embedding for p in pecas]))
+    arrumado = sum(por_contexto[n] for n in periodo.contextos_arrumados)
+    total = periodo.peso_escuro + periodo.peso_arrumado
+    ajustes = {}
+    for peca, arrumada in zip(pecas, arrumado):
+        tonalidade = int(round(float(peca.embedding[6]) * 3))
+        escuridao = ESCURIDAO_POR_TONALIDADE.get(tonalidade, 0.6)
+        arrumada = min(1.0, float(arrumada) / LIMIAR_OCASIAO)
+        ajustes[peca.id] = (periodo.peso_escuro * escuridao + periodo.peso_arrumado * arrumada) / total
+    return ajustes
+
+
 def _ajuste_clima(look: list[Peca], clima: Clima) -> float:
     fator = float(np.prod([clima.penalidades.get(p.codigo, 1.0) for p in look]))
     if clima.camada == "sempre" and not any(p.papel == "camada" for p in look):
@@ -389,6 +427,7 @@ def recomendar(
     pecas: list[Peca],
     ocasiao: str | None = None,
     clima: str | None = None,
+    periodo: str | None = None,
     top_k: int = 12,
     checkpoint_path: Path | None = None,
     feedback: Feedback | None = None,
@@ -398,6 +437,7 @@ def recomendar(
     ajuste_feedback = AjusteFeedback(feedback, ocasiao) if feedback else None
     regra_ocasiao = OCASIOES[ocasiao] if ocasiao else None
     regra_clima = CLIMAS[clima] if clima else None
+    regra_periodo = PERIODOS.get(periodo) if periodo else None
 
     candidatos = _gerar_candidatos(pecas, regra_clima)
     permitidos = [look for look in candidatos if _permitido(look, regra_ocasiao, regra_clima)]
@@ -418,9 +458,12 @@ def recomendar(
         pesos["ocasiao"] = PESOS["ocasiao"]
     if regra_clima:
         pesos["clima"] = PESOS["clima"]
+    if regra_periodo:
+        pesos["periodo"] = PESOS["periodo"]
     total = sum(pesos.values())
 
     ajuste_por_peca = _ajustes_ocasiao(pecas, regra_ocasiao) if regra_ocasiao else {}
+    ajuste_periodo = _ajustes_periodo(pecas, regra_periodo) if regra_periodo else {}
     looks = []
     for look_pecas, compat in zip(candidatos, _compatibilidades(candidatos, checkpoint_path)):
         look = Look(pecas=look_pecas, compatibilidade=compat)
@@ -428,6 +471,8 @@ def recomendar(
             look.ocasiao = float(np.mean([ajuste_por_peca[p.id] for p in look_pecas]))
         if regra_clima:
             look.clima = _ajuste_clima(look_pecas, regra_clima)
+        if regra_periodo:
+            look.periodo = float(np.mean([ajuste_periodo[p.id] for p in look_pecas]))
         look.score = sum(getattr(look, nome) * peso for nome, peso in pesos.items()) / total
         if ajuste_feedback:
             look.feedback = ajuste_feedback.ajuste(frozenset(p.id for p in look_pecas))

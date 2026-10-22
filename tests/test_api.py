@@ -16,7 +16,7 @@ from api.auth import Autenticador
 from api.main import app
 from features.embedding_neural import VERSAO_FEATURES
 import api.main
-from model.recomendar import CAMADAS, CLIMAS, OCASIOES
+from model.recomendar import CAMADAS, CLIMAS, OCASIOES, PERIODOS, Peca, _ajustes_periodo
 
 FIXTURE = Path("tests/fixtures/guarda_roupa.json")
 FOTO = Path("dados/roupas/saia.jpg")
@@ -118,6 +118,26 @@ def test_recomenda_looks_validos_pra_toda_ocasiao_e_clima(cliente, pecas, ocasia
     assert all(0 <= s <= 1 for s in scores)
 
 
+@pytest.mark.parametrize("ocasiao", [None, *OCASIOES])
+def test_noite_devolve_looks_validos_com_detalhe_de_periodo(cliente, pecas, ocasiao):
+    corpo = _recomendar(cliente, pecas, ocasiao=ocasiao, periodo="noite")
+    assert corpo["looks"]
+    _checar_looks(corpo["looks"], pecas)
+    assert all(0 <= look["detalhes"]["periodo"] <= 1 for look in corpo["looks"])
+    assert all(0 <= look["score"] <= 1 for look in corpo["looks"])
+
+
+def test_noite_prefere_cor_escura_com_o_resto_igual(pecas):
+    base = np.asarray(pecas[0]["features"]["embedding"], dtype=np.float32)
+    versoes = []
+    for tonalidade in (0, 2):
+        emb = base.copy()
+        emb[6] = tonalidade / 3
+        versoes.append(Peca(f"t{tonalidade}", "top", emb, 4))
+    ajustes = _ajustes_periodo(versoes, PERIODOS["noite"])
+    assert ajustes["t2"] > ajustes["t0"]
+
+
 def test_frio_nao_sugere_short(cliente, pecas):
     looks = _recomendar(cliente, pecas, clima="frio")["looks"]
     assert looks
@@ -142,7 +162,7 @@ def test_peca_com_features_quebradas_e_ignorada_sem_derrubar(cliente, pecas, fea
 
 @pytest.mark.parametrize(
     "campo, valor",
-    [("ocasiao", "balada"), ("clima", "neve"), ("top_k", 0), ("top_k", 51)],
+    [("ocasiao", "balada"), ("clima", "neve"), ("periodo", "madrugada"), ("top_k", 0), ("top_k", 51)],
 )
 def test_pedido_invalido_da_422(cliente, pecas, campo, valor):
     resposta = cliente.post("/looks/recommend", json={"pecas": pecas, campo: valor})
