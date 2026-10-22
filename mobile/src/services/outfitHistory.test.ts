@@ -10,7 +10,7 @@ class FakeRepository implements OutfitHistoryStore {
   wears: Wear[] = [];
   rejections: Rejection[] = [];
   fail = false;
-  failFetchRejections = false;
+  failFetchRejections: false | 'missing' | 'other' = false;
   // Se definido, os favoritos só chegam quando ele resolver.
   gate: Promise<void> | null = null;
   // Falha só pra esses looks (ids juntados com '+').
@@ -35,7 +35,7 @@ class FakeRepository implements OutfitHistoryStore {
     return this.wears;
   }
   async fetchRejections() {
-    if (this.failFetchRejections) throw new Error('tabela não existe');
+    if (this.failFetchRejections) throw this.failFetchRejections === 'missing' ? { code: 'PGRST205' } : new Error('offline');
     return this.rejections;
   }
   async addRejection(itemIds: string[], occasion: string | null) {
@@ -284,7 +284,7 @@ test('carrega rejeições e usos pro recomendador', async () => {
 
 test('sem a tabela de rejeições, favoritos continuam carregando', async () => {
   const repo = new FakeRepository();
-  repo.failFetchRejections = true;
+  repo.failFetchRejections = 'missing';
   repo.favorites = [['a-calca', 'b-blusa']];
   const history = new OutfitHistory(repo);
 
@@ -292,6 +292,19 @@ test('sem a tabela de rejeições, favoritos continuam carregando', async () => 
 
   expect(history.isFavorite(look([blusa, calca]))).toBe(true);
   expect(history.rejections).toEqual([]);
+});
+
+test('erro que não é tabela ausente nas rejeições não é engolido', async () => {
+  const repo = new FakeRepository();
+  repo.failFetchRejections = 'other';
+  const history = new OutfitHistory(repo);
+
+  await expect(history.load(NOW)).rejects.toThrow('offline');
+  // Não marcou como carregado: a próxima tela tenta de novo.
+  repo.failFetchRejections = false;
+  const spy = jest.spyOn(repo, 'fetchFavorites');
+  await history.ensureLoaded();
+  expect(spy).toHaveBeenCalled();
 });
 
 test('descreve há quanto tempo o look foi usado', () => {

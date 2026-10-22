@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { supabase } from '../services/supabase';
-import { unwrap } from './supabaseHelpers';
+import { isTableMissing, unwrap } from './supabaseHelpers';
 
 const TABLES = [
   'clothing_items',
@@ -11,9 +11,6 @@ const TABLES = [
   'outfit_rejections',
 ];
 const BUCKETS = ['clothing-images', 'wishlist-images'];
-
-/** Tabela que não existe: PostgREST 12+ e o código do Postgres, que as versões antigas repassavam. */
-const TABLE_NOT_FOUND = new Set(['PGRST205', '42P01']);
 
 /**
  * Conta da usuária logada: e-mail, sair e apagar tudo o que ela enviou.
@@ -51,7 +48,7 @@ export class AccountRepository {
       const { error } = await this.client.from(table).delete().eq('user_id', userId);
       // Tabela que ainda não foi criada no projeto (ex.: a de rejeições, mais
       // nova): não tem o que apagar nela.
-      if (error && !TABLE_NOT_FOUND.has((error as { code?: string }).code ?? '')) throw error;
+      if (error && !isTableMissing(error)) throw error;
     }
     for (const bucket of BUCKETS) {
       const storage = this.client.storage.from(bucket);

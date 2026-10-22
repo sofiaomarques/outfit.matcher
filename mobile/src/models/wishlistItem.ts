@@ -9,4 +9,6 @@ export interface WishlistItem {
   imagePath?: string;
   /** URL (assinada) da foto. */
   imageUrl?: string;
+  /** Quando `imageUrl` vence (ms desde a época); ver `needsUrlRefresh`. */
+  imageUrlExpiresAt?: number;
 }

@@ -4,6 +4,7 @@ import {
   type Rejection,
   type Wear,
 } from '../repositories/outfitHistoryRepository';
+import { isTableMissing } from '../repositories/supabaseHelpers';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -140,8 +141,13 @@ export class OutfitHistory {
       this.repository.fetchFavorites(),
       this.repository.fetchWears(since),
       // Tabela mais nova: se ainda não foi criada no projeto Supabase, os
-      // favoritos e usos continuam funcionando, só sem rejeições.
-      this.repository.fetchRejections().catch((): Rejection[] => []),
+      // favoritos e usos continuam funcionando, só sem rejeições. Qualquer
+      // outro erro (rede, permissão) sobe: carregar sem rejeições faria o
+      // recomendador voltar a sugerir looks rejeitados.
+      this.repository.fetchRejections().catch((error): Rejection[] => {
+        if (isTableMissing(error)) return [];
+        throw error;
+      }),
     ]);
     if (generation !== this.generation) return;
     this._favorites = favorites;
