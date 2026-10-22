@@ -26,6 +26,7 @@ import {
   recoveryErrorMessage,
   supabasePasswordRecovery,
 } from './src/services/passwordRecovery';
+import { RecommendationService } from './src/services/recommendation';
 import { supabase } from './src/services/supabase';
 import { colors } from './src/theme/colors';
 import { fontAssets, text } from './src/theme/fonts';
@@ -88,7 +89,11 @@ function RootNavigator() {
   const showToast = useToast();
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    supabase.auth
+      .getSession()
+      .then(({ data }) => setSession(data.session))
+      // Sem isso, uma falha ao ler a sessão salva deixaria o spinner pra sempre.
+      .catch(() => setSession(null));
     const { data } = supabase.auth.onAuthStateChange((event, next) => {
       setSession(next);
       // Se o Supabase abrir sozinho a sessão do link, a senha nova ainda é pedida.
@@ -99,6 +104,7 @@ function RootNavigator() {
         setRecovery({ step: 'none' });
         // A próxima conta não herda o histórico de looks nem a aba aberta.
         outfitHistory.reset();
+        RecommendationService.reset();
         setSelectedIndex(0);
       }
     });
@@ -174,6 +180,7 @@ function RootNavigator() {
   function onDataErased() {
     setDataVersion((v) => v + 1);
     outfitHistory.reset();
+    RecommendationService.reset();
     outfitHistory.load().catch(() => {});
   }
 

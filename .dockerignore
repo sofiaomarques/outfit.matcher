@@ -14,3 +14,6 @@ supabase
 model/*.pt
 model/.cache
 model/historico_*.csv
+
+# site do Wable: o app mobile tem a propria imagem (mobile/Dockerfile)
+mobile

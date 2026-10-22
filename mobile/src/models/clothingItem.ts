@@ -13,6 +13,8 @@ export interface ClothingItem {
   swatch: number;
   /** URL (assinada) da foto no Supabase Storage. */
   imageUrl?: string;
+  /** Quando `imageUrl` vence (ms desde a época); ver `needsUrlRefresh`. */
+  imageUrlExpiresAt?: number;
   /** Caminho da foto dentro do bucket `clothing-images`. */
   storagePath?: string;
   isFavorite: boolean;

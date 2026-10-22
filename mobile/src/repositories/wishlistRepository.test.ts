@@ -6,11 +6,11 @@ const row = { id: 'w1', description: 'vestido floral', image_path: 'user-1/w1.pn
 
 function setup(tables: FakeOptions['tables'] = {}) {
   const upload = ok({});
-  const remove = ok([]);
-  const createSignedUrl = ok({ signedUrl: 'https://signed/w' });
+  const remove = ok([{ name: 'x' }]);
+  const createSignedUrls = ok([{ path: 'user-1/w1.png', signedUrl: 'https://signed/w', error: null }]);
   const fake = fakeSupabase({
     tables,
-    storage: { 'wishlist-images': { upload, remove, createSignedUrl } },
+    storage: { 'wishlist-images': { upload, remove, createSignedUrls } },
   });
   return { ...fake, repo: new WishlistRepository(fake.client, () => 'new-id'), upload, remove };
 }
@@ -23,6 +23,7 @@ test('fetchItems devolve descrição, caminho e URL assinada', async () => {
       description: 'vestido floral',
       imagePath: 'user-1/w1.png',
       imageUrl: 'https://signed/w',
+      imageUrlExpiresAt: expect.any(Number),
     },
   ]);
 });
@@ -57,4 +58,12 @@ test('se o upload falha, a linha não é criada', async () => {
   const repo = new WishlistRepository(fake.client, () => 'x');
   await expect(repo.addItem({ description: 'x', imageBytes: PNG })).rejects.toThrow('sem espaço');
   expect(fake.calls).toHaveLength(0);
+});
+
+test('se o insert falha, a foto recém-enviada é apagada', async () => {
+  const { repo, remove } = setup({ wishlist_items: { error: { code: '42501' } } });
+  await expect(repo.addItem({ description: 'x', imageBytes: PNG })).rejects.toMatchObject({
+    code: '42501',
+  });
+  expect(remove).toHaveBeenCalledWith(['user-1/new-id.png']);
 });

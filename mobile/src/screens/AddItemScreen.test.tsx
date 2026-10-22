@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderScreen } from '../test/render';
 import { pickPhoto } from '../utils/pickPhoto';
@@ -100,4 +100,32 @@ test('se salvar falha, mostra o erro e não fecha', async () => {
 
   expect(await screen.findByText('Não foi possível salvar. Tente de novo.')).toBeTruthy();
   expect(onClose).not.toHaveBeenCalled();
+});
+
+test('trocar a foto durante o recorte: o recorte da antiga não sobrescreve a nova', async () => {
+  const SECOND = new Uint8Array([0xff, 0xd8, 2]);
+  const SECOND_CROPPED = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 7]);
+  let resolveFirst!: (bytes: Uint8Array) => void;
+  analysis.recortarPeca
+    .mockImplementationOnce(() => new Promise<Uint8Array>((resolve) => (resolveFirst = resolve)))
+    .mockResolvedValueOnce(SECOND_CROPPED);
+  mockPick.mockResolvedValueOnce(OK).mockResolvedValueOnce({ ...OK, bytes: SECOND });
+
+  // O onPress de "Escolher da galeria" só termina com o recorte; o fireEvent o
+  // esperaria, então as escolhas não são aguardadas.
+  await renderScreen(<AddItemScreen repository={repo} analysisService={analysis} onClose={onClose} />);
+  await fireEvent.press(screen.getByLabelText('Escolher foto'));
+  void fireEvent.press(await screen.findByText('Escolher da galeria'));
+  await waitFor(() => expect(analysis.recortarPeca).toHaveBeenCalledWith(ORIGINAL));
+  await fireEvent.press(screen.getByLabelText('Escolher foto'));
+  void fireEvent.press(await screen.findByText('Escolher da galeria'));
+  await waitFor(() => expect(analysis.recortarPeca).toHaveBeenCalledWith(SECOND));
+
+  // O recorte da primeira foto termina por último.
+  await act(async () => resolveFirst(CROPPED));
+
+  await fireEvent.changeText(screen.getByLabelText('Nome da peça'), 'Blusa');
+  await fireEvent.press(screen.getByText('Salvar'));
+  await waitFor(() => expect(onClose).toHaveBeenCalledWith(true));
+  expect(repo.addItem.mock.calls[0][0].imageBytes).toBe(SECOND_CROPPED);
 });

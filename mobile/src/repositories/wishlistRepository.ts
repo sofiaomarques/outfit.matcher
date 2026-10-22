@@ -4,11 +4,14 @@ import { randomUUID } from 'expo-crypto';
 import type { WishlistItem } from '../models/wishlistItem';
 import { supabase } from '../services/supabase';
 import {
-  SIGNED_URL_TTL_SECONDS,
   check,
-  detectImageContentType,
+  needsUrlRefresh,
+  removeImageQuietly,
   requireUserId,
+  signImages,
   unwrap,
+  uploadThenSave,
+  type SignedImage,
 } from './supabaseHelpers';
 
 const TABLE = 'wishlist_items';
@@ -32,42 +35,62 @@ export class WishlistRepository {
     const rows = unwrap(
       await this.client.from(TABLE).select().order('created_at', { ascending: false }),
     );
-    return Promise.all(rows.map((row) => this.toWishlistItem(row)));
+    const signed = await signImages(this.client, BUCKET, rows.map((row) => row.image_path as string));
+    return rows.map((row) => toWishlistItem(row, signed.get(row.image_path)));
+  }
+
+  /** Gera URLs novas pros itens cuja URL venceu (ou vence logo); ver `WardrobeRepository.refreshImageUrls`. */
+  async refreshImageUrls(items: WishlistItem[]): Promise<WishlistItem[]> {
+    const stale = items.filter((i) => i.imagePath && needsUrlRefresh(i.imageUrlExpiresAt));
+    if (stale.length === 0) return items;
+    const signed = await signImages(this.client, BUCKET, stale.map((i) => i.imagePath!));
+    return items.map((item) => {
+      const fresh = item.imagePath ? signed.get(item.imagePath) : undefined;
+      return fresh && stale.includes(item)
+        ? { ...item, imageUrl: fresh.url, imageUrlExpiresAt: fresh.expiresAt }
+        : item;
+    });
   }
 
   async addItem(params: { description: string; imageBytes: Uint8Array }): Promise<WishlistItem> {
     const userId = await requireUserId(this.client);
     const id = this.newId();
-    const contentType = detectImageContentType(params.imageBytes);
-    const extension = contentType === 'image/png' ? 'png' : 'jpg';
-    const imagePath = `${userId}/${id}.${extension}`;
 
-    check(
-      await this.client.storage.from(BUCKET).upload(imagePath, params.imageBytes, { contentType }),
-    );
-
-    const row = unwrap(
-      await this.client
-        .from(TABLE)
-        .insert({ id, user_id: userId, description: params.description, image_path: imagePath })
-        .select()
-        .single(),
-    );
-    return this.toWishlistItem(row);
+    return uploadThenSave({
+      client: this.client,
+      bucket: BUCKET,
+      userId,
+      id,
+      imageBytes: params.imageBytes,
+      save: async (imagePath) => {
+        const row = unwrap(
+          await this.client
+            .from(TABLE)
+            .insert({ id, user_id: userId, description: params.description, image_path: imagePath })
+            .select()
+            .single(),
+        );
+        const signed = await signImages(this.client, BUCKET, [imagePath]);
+        return toWishlistItem(row, signed.get(imagePath));
+      },
+    });
   }
 
+  /** Apaga a linha e depois a foto; falha na foto só é registrada (ver `WardrobeRepository.deleteItem`). */
   async deleteItem(item: WishlistItem): Promise<void> {
     check(await this.client.from(TABLE).delete().eq('id', item.id));
     if (item.imagePath) {
-      check(await this.client.storage.from(BUCKET).remove([item.imagePath]));
+      await removeImageQuietly(this.client, BUCKET, item.imagePath);
     }
   }
+}
 
-  private async toWishlistItem(row: Record<string, any>): Promise<WishlistItem> {
-    const imagePath = row.image_path as string;
-    const { signedUrl } = unwrap(
-      await this.client.storage.from(BUCKET).createSignedUrl(imagePath, SIGNED_URL_TTL_SECONDS),
-    );
-    return { id: row.id, description: row.description, imagePath, imageUrl: signedUrl };
-  }
+function toWishlistItem(row: Record<string, any>, signed?: SignedImage): WishlistItem {
+  return {
+    id: row.id,
+    description: row.description,
+    imagePath: row.image_path as string,
+    imageUrl: signed?.url,
+    imageUrlExpiresAt: signed?.expiresAt,
+  };
 }
