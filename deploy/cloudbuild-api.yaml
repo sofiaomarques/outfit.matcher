@@ -1,0 +1,27 @@
+# Build da imagem da API no Cloud Build (amd64), chamado por deploy/cloud_run.sh api.
+# O HF_TOKEN vem do Secret Manager e entra como secret do BuildKit, como no
+# build local (Dockerfile): nao fica em nenhuma camada da imagem.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    env: ["DOCKER_BUILDKIT=1"]
+    secretEnv: ["HF_TOKEN"]
+    args:
+      - -c
+      - |
+        set -e
+        umask 077
+        printf %s "$$HF_TOKEN" > /tmp/hf_token
+        docker build --secret id=HF_TOKEN,src=/tmp/hf_token \
+          --build-arg MODELOS_REVISAO=${_MODELOS_REVISAO} -t ${_IMAGEM} .
+        rm -f /tmp/hf_token
+
+images: ["${_IMAGEM}"]
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/$PROJECT_ID/secrets/HF_TOKEN/versions/latest
+      env: HF_TOKEN
+
+# torch + CLIP + rembg + pesos: o build passa de 10 min (o padrao do Cloud Build).
+timeout: 3600s

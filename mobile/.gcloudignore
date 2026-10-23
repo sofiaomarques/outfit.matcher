@@ -1,0 +1,11 @@
+# O que NAO vai pro Cloud Build no build do site (deploy/cloud_run.sh site):
+# o Dockerfile roda `npm ci` e o build dentro da imagem.
+.gcloudignore
+.claude
+node_modules/
+dist/
+web-build/
+.expo/
+coverage/
+.env*
+.DS_Store
