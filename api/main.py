@@ -18,12 +18,13 @@ import logging
 import os
 import tempfile
 import threading
+import time
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from starlette.datastructures import Headers
@@ -33,6 +34,7 @@ from PIL import Image
 from pydantic import BaseModel, Field
 
 from api.auth import ExigeLogin, autenticador_do_ambiente
+from api.uso import RegistroDeUso, anotar, registrar
 from features.categoria import carregar_modelo_categoria
 from features.embedding_neural import VERSAO_FEATURES, gerar_embedding_completo
 from features.recorte import recortar_peca
@@ -56,6 +58,7 @@ def _carregar(nome: str, carregar: Callable[[], str]) -> str:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    inicio = time.perf_counter()
     # Antes dos modelos: sem configuracao de login, falha em segundos.
     app.state.autenticador = autenticador_do_ambiente()
     # Carrega os modelos ao subir, nao na primeira requisicao: o /health so
@@ -65,6 +68,10 @@ async def lifespan(app: FastAPI):
         "match": _carregar("match", carregar_modelo_match),
         "categoria": _carregar("categoria", carregar_modelo_categoria),
     }
+    # Quanto do cold start e carregar os modelos (o resto e o Cloud Run
+    # subindo o container), pra medir o #15 e o aviso do app (#25).
+    segundos = round(time.perf_counter() - inicio, 1)
+    registrar("api_subiu", f"API pronta em {segundos}s", segundos=segundos, modelos=app.state.modelos)
     yield
 
 
@@ -133,6 +140,8 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["Authorization", "Content-Type"],
 )
+# Por fora de tudo: registra tambem os 401, 413 e as respostas do CORS (#20).
+app.add_middleware(RegistroDeUso)
 
 
 @app.get("/health")
@@ -301,7 +310,7 @@ class PedidoRecomendacao(BaseModel):
 
 
 @app.post("/looks/recommend")
-def recommend_looks(pedido: PedidoRecomendacao) -> dict:
+def recommend_looks(pedido: PedidoRecomendacao, request: Request) -> dict:
     """Monta e ordena looks a partir do guarda-roupa enviado pelo app
     (model/recomendar.py). O app manda as pecas com features em vez de a API
     ler do Supabase — assim a API nao precisa de chave de servico e o RLS
@@ -323,5 +332,16 @@ def recommend_looks(pedido: PedidoRecomendacao) -> dict:
         periodo=pedido.periodo,
         top_k=pedido.top_k,
         feedback=feedback,
+    )
+    # Pro registro de uso (api/uso.py): so as escolhas e contagens, nenhum id.
+    anotar(
+        request,
+        ocasiao=pedido.ocasiao,
+        clima=pedido.clima,
+        periodo=pedido.periodo,
+        pecas=len(pedido.pecas),
+        pecas_ignoradas=len(ignoradas),
+        looks=len(looks),
+        com_feedback=feedback is not None,
     )
     return {"looks": looks, "pecas_ignoradas": ignoradas}

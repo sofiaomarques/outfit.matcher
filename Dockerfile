@@ -80,4 +80,6 @@ RUN useradd --create-home --uid 1000 app
 USER app
 
 EXPOSE 7860
-CMD ["sh", "-c", "exec uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-7860}"]
+# --no-access-log: o log de acesso do uvicorn grava o IP de quem chama; o
+# registro de uso (api/uso.py) ja tem rota, status e tempo, sem dado pessoal.
+CMD ["sh", "-c", "exec uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-7860} --no-access-log"]

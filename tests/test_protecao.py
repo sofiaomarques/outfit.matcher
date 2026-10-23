@@ -106,6 +106,14 @@ def test_401_leva_os_cabecalhos_de_cors(cliente):
     assert resposta.headers["access-control-allow-origin"] == "http://localhost:5173"
 
 
+def test_401_aparece_no_registro_de_uso_sem_o_token(cliente, linhas_de_uso):
+    # Token recusado (#20): da pra contar tentativas sem login no log.
+    assert _recomendar(cliente, "nao-e-um-jwt").status_code == 401
+    [linha] = linhas_de_uso
+    assert (linha["rota"], linha["status"], linha["severity"]) == ("/looks/recommend", 401, "WARNING")
+    assert "nao-e-um-jwt" not in str(linha)
+
+
 @pytest.mark.parametrize("rota", ["/openapi.json", "/docs", "/rota-que-nao-existe"])
 def test_qualquer_outra_rota_exige_login(cliente, rota):
     assert cliente.get(rota).status_code == 401

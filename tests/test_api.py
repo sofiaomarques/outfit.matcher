@@ -139,6 +139,18 @@ def test_noite_devolve_looks_validos_com_detalhe_de_periodo(cliente, pecas, ocas
     assert all(0 <= look["score"] <= 1 for look in corpo["looks"])
 
 
+def test_recomendacao_entra_no_registro_de_uso_sem_ids(cliente, pecas, linhas_de_uso):
+    # #20: ocasiao/clima/periodo e contagens pra comparar com favoritos e
+    # rejeicoes no Supabase; nenhum id de peca.
+    corpo = _recomendar(cliente, pecas, ocasiao="trabalho", clima="frio", periodo="noite", top_k=5)
+    [linha] = linhas_de_uso
+    assert (linha["rota"], linha["status"]) == ("/looks/recommend", 200)
+    assert (linha["ocasiao"], linha["clima"], linha["periodo"]) == ("trabalho", "frio", "noite")
+    assert (linha["pecas"], linha["pecas_ignoradas"], linha["looks"]) == (len(pecas), 0, len(corpo["looks"]))
+    assert linha["com_feedback"] is False
+    assert not any(p["id"] in str(linha) for p in pecas)
+
+
 def test_noite_prefere_cor_escura_com_o_resto_igual(pecas):
     base = np.asarray(pecas[0]["features"]["embedding"], dtype=np.float32)
     versoes = []
