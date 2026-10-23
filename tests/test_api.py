@@ -1,5 +1,6 @@
 """Contrato da API com o app: o que o app manda e o que ele espera receber
-(app/lib/services/recommendation_service.dart e garment_analysis_service.dart),
+(mobile/src/services/recommendation.ts e garmentAnalysis.ts; no Flutter,
+app/lib/services/recommendation_service.dart e garment_analysis_service.dart),
 e que a API esta usando os modelos de producao."""
 
 from __future__ import annotations
