@@ -22,14 +22,17 @@ describe('AccountRepository', () => {
 
     await new AccountRepository(client).eraseMyData();
 
-    expect(calls.map((c) => c.table)).toEqual([
-      'clothing_items',
-      'wishlist_items',
-      'outfit_favorites',
-      'outfit_wears',
-      'outfit_rejections',
-    ]);
+    // Cada tabela: o delete e a conferência de que não sobrou linha.
+    expect(calls.map((c) => c.table)).toEqual(
+      ['clothing_items', 'wishlist_items', 'outfit_favorites', 'outfit_wears', 'outfit_rejections'].flatMap(
+        (table) => [table, table],
+      ),
+    );
     expect(calls[0].steps).toEqual([['delete'], ['eq', 'user_id', 'user-1']]);
+    expect(calls[1].steps).toEqual([
+      ['select', 'id', { count: 'exact', head: true }],
+      ['eq', 'user_id', 'user-1'],
+    ]);
     expect(list).toHaveBeenCalledWith('user-1');
     expect(remove).toHaveBeenCalledWith(['user-1/a.jpg']);
   });
@@ -45,7 +48,21 @@ describe('AccountRepository', () => {
       code: '42501',
     });
     // Parou na wishlist: as tabelas seguintes nem foram tocadas.
-    expect(denied.calls.map((c) => c.table)).toEqual(['clothing_items', 'wishlist_items']);
+    expect(denied.calls.map((c) => c.table)).toEqual(['clothing_items', 'clothing_items', 'wishlist_items']);
+  });
+
+  test('delete recusado em silêncio pelo RLS (sobrou linha) vira erro', async () => {
+    // Sem a policy de delete, o PostgREST responde sem erro e não apaga nada.
+    const { client, calls } = fakeSupabase({
+      tables: {
+        outfit_wears: (call) => (call.steps[0][0] === 'select' ? { count: 3 } : {}),
+      },
+    });
+    await expect(new AccountRepository(client).eraseMyData()).rejects.toThrow(
+      '3 registro(s) de outfit_wears não foram apagados.',
+    );
+    // Parou antes das rejeições e das fotos.
+    expect(calls.map((c) => c.table)).not.toContain('outfit_rejections');
   });
 
   test('sem usuário logado não apaga nada', async () => {

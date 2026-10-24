@@ -5,7 +5,7 @@ export interface Call {
   steps: unknown[][];
 }
 
-type Result = { data?: unknown; error?: unknown };
+type Result = { data?: unknown; error?: unknown; count?: number | null };
 
 /**
  * Cliente Supabase de mentira: cada `from(tabela)` vira um construtor

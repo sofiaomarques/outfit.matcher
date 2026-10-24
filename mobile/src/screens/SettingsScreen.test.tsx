@@ -127,8 +127,9 @@ test('enquanto apaga, um diálogo tampa o app e o botão fica travado', async ()
   expect(erased).toHaveBeenCalledTimes(1);
 });
 
-test('se apagar falhar, avisa e recarrega as telas', async () => {
+test('se apagar falhar, avisa, registra a causa e recarrega as telas', async () => {
   account.fail = true;
+  const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
   await pumpSettings();
 
   await tapErase();
@@ -139,4 +140,7 @@ test('se apagar falhar, avisa e recarrega as telas', async () => {
   expect(erased).toHaveBeenCalledTimes(1);
   // O botão volta a funcionar pra tentar de novo.
   expect(screen.getByText('Apagar meus dados')).toBeTruthy();
+  // A causa fica no console, pra investigar no teste com o Supabase real.
+  expect(warn).toHaveBeenCalledWith('Apagar meus dados falhou:', expect.any(Error));
+  warn.mockRestore();
 });
