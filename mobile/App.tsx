@@ -1,7 +1,7 @@
 import type { Session } from '@supabase/supabase-js';
 import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -17,7 +17,7 @@ import { WardrobeScreen } from './src/screens/WardrobeScreen';
 import { WishlistScreen } from './src/screens/WishlistScreen';
 import { isSupabaseConfigured } from './src/services/apiConfig';
 import { apiStatus } from './src/services/apiStatus';
-import { displayNameOf } from './src/services/currentUser';
+import { displayNameOf, isAccountSwitch } from './src/services/currentUser';
 import { outfitHistory } from './src/services/outfitHistory';
 import {
   EXPIRED_LINK,
@@ -87,14 +87,29 @@ function RootNavigator() {
   const [dataVersion, setDataVersion] = useState(0);
   const [recovery, setRecovery] = useState<Recovery>({ step: 'none' });
   const showToast = useToast();
+  // De quem é o estado em memória (histórico de looks, guarda-roupa em análise).
+  const userIdRef = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
+    // A próxima conta não herda o histórico de looks nem a aba aberta.
+    function forgetAccount() {
+      outfitHistory.reset();
+      RecommendationService.reset();
+      setSelectedIndex(0);
+      setDataVersion((v) => v + 1);
+    }
+
     supabase.auth
       .getSession()
       .then(({ data }) => setSession(data.session))
       // Sem isso, uma falha ao ler a sessão salva deixaria o spinner pra sempre.
       .catch(() => setSession(null));
     const { data } = supabase.auth.onAuthStateChange((event, next) => {
+      const nextUserId = next?.user.id ?? null;
+      // Link de redefinição de outra conta aberto com alguém logado: entra
+      // por cima, sem SIGNED_OUT (isAccountSwitch).
+      if (isAccountSwitch(userIdRef.current, nextUserId)) forgetAccount();
+      userIdRef.current = nextUserId;
       setSession(next);
       // Se o Supabase abrir sozinho a sessão do link, a senha nova ainda é pedida.
       if (event === 'PASSWORD_RECOVERY') setRecovery({ step: 'ready' });
@@ -102,10 +117,7 @@ function RootNavigator() {
       if (event === 'SIGNED_IN') setRecovery((r) => (r.step === 'failed' ? { step: 'none' } : r));
       if (event === 'SIGNED_OUT') {
         setRecovery({ step: 'none' });
-        // A próxima conta não herda o histórico de looks nem a aba aberta.
-        outfitHistory.reset();
-        RecommendationService.reset();
-        setSelectedIndex(0);
+        forgetAccount();
       }
     });
     return () => data.subscription.unsubscribe();

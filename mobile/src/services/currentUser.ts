@@ -12,3 +12,13 @@ export function displayNameOf(user: Pick<User, 'email' | 'user_metadata'> | null
   if (user.email?.includes('@')) return user.email.split('@')[0];
   return '';
 }
+
+/**
+ * Outra conta entrou sem a anterior sair: acontece quando alguém logado abre
+ * o link de "Esqueci minha senha" de outra conta (o link abre a sessão dela
+ * por cima). O Supabase só avisa SIGNED_IN, então o estado da conta anterior
+ * (histórico de looks, guarda-roupa em análise) tem que ser zerado aqui.
+ */
+export function isAccountSwitch(previousUserId: string | null | undefined, nextUserId: string | null | undefined): boolean {
+  return !!previousUserId && !!nextUserId && previousUserId !== nextUserId;
+}
