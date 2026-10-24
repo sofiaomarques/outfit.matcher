@@ -8,6 +8,7 @@ import {
   recoveryErrorMessage,
   supabasePasswordRecovery,
   validateNewPassword,
+  webResetUrl,
 } from './passwordRecovery';
 
 const apiError = (code: string, status = 400) => new AuthApiError('mensagem do servidor', status, code);
@@ -26,8 +27,18 @@ describe('parseRecoveryLink', () => {
 
   test('lê o erro que o Supabase devolve no lugar do link', () => {
     expect(
-      parseRecoveryLink('https://wable.app/#error=access_denied&error_code=otp_expired&error_description=x'),
+      parseRecoveryLink('https://wable.app/redefinir-senha#error=access_denied&error_code=otp_expired&error_description=x'),
     ).toEqual({ kind: 'error', code: 'otp_expired' });
+    expect(parseRecoveryLink(`${NATIVE_RESET_URL}#error=access_denied&error_code=otp_expired`)).toEqual({
+      kind: 'error',
+      code: 'otp_expired',
+    });
+  });
+
+  test('erro de outro link (ex.: confirmação de cadastro expirada) não é da redefinição', () => {
+    // O Supabase não diz de que link era o erro: só o endereço de volta diz.
+    expect(parseRecoveryLink('https://wable.app/#error=access_denied&error_code=otp_expired')).toBeNull();
+    expect(parseRecoveryLink('https://wable.app/?error=access_denied')).toBeNull();
   });
 
   test('ignora endereços que não são do link de redefinição', () => {
@@ -65,6 +76,24 @@ describe('recoveryErrorMessage', () => {
   test('falha de rede vira o aviso genérico', () => {
     expect(recoveryErrorMessage(new AuthRetryableFetchError('offline', 0))).toBe(NETWORK_ERROR);
     expect(recoveryErrorMessage(new Error('qualquer'))).toBe(NETWORK_ERROR);
+  });
+});
+
+describe('webResetUrl', () => {
+  test('volta pra /redefinir-senha do site, de qualquer página', () => {
+    expect(webResetUrl('https://wable.app', '/')).toBe('https://wable.app/redefinir-senha');
+    expect(webResetUrl('https://wable.app', '')).toBe('https://wable.app/redefinir-senha');
+    // Pedido de novo a partir do próprio link que expirou: não repete o caminho.
+    expect(webResetUrl('https://wable.app', '/redefinir-senha')).toBe('https://wable.app/redefinir-senha');
+    // Site fora da raiz.
+    expect(webResetUrl('https://x.github.io', '/wable/')).toBe('https://x.github.io/wable/redefinir-senha');
+  });
+
+  test('o endereço de volta é reconhecido como o da redefinição', () => {
+    expect(parseRecoveryLink(`${webResetUrl('https://wable.app', '/')}#error_code=otp_expired`)).toEqual({
+      kind: 'error',
+      code: 'otp_expired',
+    });
   });
 });
 
