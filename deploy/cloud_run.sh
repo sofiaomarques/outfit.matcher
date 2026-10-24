@@ -36,10 +36,12 @@ url_do_servico() {
 
 # Tag da imagem: o commit atual. Com mudancas nao commitadas, o Cloud Build
 # envia os arquivos como estao, entao a tag ganha "-sujo" pra nao enganar.
+# Arquivo fora do git (ex.: mobile/.claude/) nao conta: o .gcloudignore ja
+# deixa de fora o que importa.
 tag_da_imagem() {
     local tag
     tag="$(git -C "$RAIZ" rev-parse --short HEAD)"
-    if [ -n "$(git -C "$RAIZ" status --porcelain)" ]; then
+    if [ -n "$(git -C "$RAIZ" status --porcelain --untracked-files=no)" ]; then
         tag="$tag-sujo-$(date +%Y%m%d%H%M%S)"
     fi
     echo "$tag"
@@ -88,22 +90,38 @@ JSON
         printf %s "$token" | gc secrets create HF_TOKEN --replication-policy automatic --data-file=-
         unset token
     fi
+    echo "== Permissoes do Cloud Build"
     # O Cloud Build roda com a conta padrao do Compute Engine (projetos novos)
     # ou com a conta legada do Cloud Build: as duas podem ler o secret.
-    local numero conta
+    local numero conta papel
     numero="$(gc projects describe "$PROJECT" --format='value(projectNumber)')"
     for conta in "$numero-compute@developer.gserviceaccount.com" "$numero@cloudbuild.gserviceaccount.com"; do
         gc secrets add-iam-policy-binding HF_TOKEN \
             --member "serviceAccount:$conta" --role roles/secretmanager.secretAccessor \
             >/dev/null 2>&1 && echo "   $conta pode ler o HF_TOKEN" || true
     done
+    # A conta do Compute Engine nem sempre ganha o papel de Editor sozinha
+    # (depende da politica da conta Google): sem estes, o build nao le o
+    # codigo enviado, nao grava log nem sobe a imagem.
+    conta="$numero-compute@developer.gserviceaccount.com"
+    for papel in roles/storage.objectViewer roles/logging.logWriter roles/artifactregistry.writer; do
+        gc projects add-iam-policy-binding "$PROJECT" --member "serviceAccount:$conta" \
+            --role "$papel" --condition None >/dev/null
+        echo "   $conta: $papel"
+    done
 
     echo "== Alerta de orcamento"
-    local conta_faturamento
+    local conta_faturamento orcamentos
     conta_faturamento="$(gc billing projects describe "$PROJECT" --format='value(billingAccountName)')"
     conta_faturamento="${conta_faturamento#billingAccounts/}"
-    if gc billing budgets list --billing-account "$conta_faturamento" \
-        --format='value(displayName)' | grep -qx "Wable"; then
+    # Precisa ser administradora da conta de faturamento (uma conta que nao
+    # aparece no `gcloud billing accounts list` nao serve). Sem permissao,
+    # avisa e segue: o resto do setup nao depende disso.
+    if ! orcamentos="$(gc billing budgets list --billing-account "$conta_faturamento" \
+        --format='value(displayName)' 2>/dev/null)"; then
+        echo "   AVISO: sem permissao pra ver os orcamentos da conta $conta_faturamento." >&2
+        echo "   Crie o alerta no console: https://console.cloud.google.com/billing/$conta_faturamento/budgets" >&2
+    elif grep -qx "Wable" <<<"$orcamentos"; then
         echo "   ja existe"
     else
         # Sem moeda: usa a da conta de faturamento. Avisa por e-mail aos
@@ -164,8 +182,13 @@ cmd_api() {
     url="$(url_do_servico "$API_SERVICE")"
     echo
     echo "== /health"
-    curl -sS --max-time 120 "$url/health" && echo
-    echo "Confira status \"ok\", login true e os modelos match v2 / categoria clip_ajustado."
+    # O deploy ja terminou: se a API demorar a acordar, so avisa.
+    if curl -sS --max-time 120 "$url/health"; then
+        echo
+        echo "Confira status \"ok\", login true e os modelos match v2 / categoria clip_ajustado."
+    else
+        echo "AVISO: /health nao respondeu em 120 s. Tente: deploy/cloud_run.sh status" >&2
+    fi
 }
 
 cmd_site() {
@@ -200,7 +223,7 @@ cmd_site() {
 cmd_status() {
     gc run services list --region "$REGION" \
         --format 'table(metadata.name, status.url, status.conditions[0].status)'
-    curl -sS --max-time 120 "$(url_do_servico "$API_SERVICE")/health" && echo
+    curl -sS --max-time 120 "$(url_do_servico "$API_SERVICE")/health" && echo || true
 }
 
 case "${1:-}" in

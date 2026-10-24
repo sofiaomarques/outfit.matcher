@@ -43,9 +43,19 @@ deploy/cloud_run.sh setup
   serviço: a da API tem ~3 GB e o armazenamento grátis é 0,5 GB.
 - Pede o token do Hugging Face sem mostrar na tela e guarda como secret
   `HF_TOKEN`. Ele só é usado no build.
+- Dá à conta de serviço do Cloud Build os papéis para ler o código enviado,
+  gravar log e subir a imagem (nem todo projeto novo dá isso sozinho).
 - Cria o alerta de orçamento **"Wable"**: e-mail em 50%, 90% e 100% de
   `BUDGET` (padrão 5, na moeda da conta de faturamento; em reais, use algo
-  como `BUDGET=30`). **O alerta avisa, mas não desliga nada.**
+  como `BUDGET=30`). **O alerta avisa, mas não desliga nada.** É preciso ser
+  administradora da conta de faturamento. Sem isso o script avisa e mostra o
+  link para criar o alerta no console.
+
+> O projeto `gen-lang-client-0342534290` (Gemini/AI Studio) já tem
+> faturamento, numa conta que o `gcloud billing accounts list` não mostra para
+> você. Funcionaria para a API, mas não daria para criar o alerta, e o custo
+> do Wable se misturaria ao do Gemini. Por isso a recomendação de um projeto
+> próprio.
 
 ## 2. API
 
