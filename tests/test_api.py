@@ -101,7 +101,7 @@ def test_health_degradado_com_o_login_desligado(cliente):
     assert corpo["status"] == "degradado"
 
 
-def test_health_degradado_quando_um_peso_nao_carrega(monkeypatch):
+def test_health_degradado_quando_um_peso_nao_carrega(monkeypatch, linhas_de_uso):
     def quebrado() -> str:
         raise RuntimeError("checkpoint corrompido")
 
@@ -111,6 +111,19 @@ def test_health_degradado_quando_um_peso_nao_carrega(monkeypatch):
     assert corpo["status"] == "degradado"
     assert corpo["modelos"]["match"] == "erro"
     assert corpo["modelos"]["categoria"] == "clip_ajustado"
+    # O registro de uso tambem avisa, sem depender de alguem abrir o /health.
+    [subiu] = [linha for linha in linhas_de_uso if linha["evento"] == "api_subiu"]
+    assert subiu["severity"] == "WARNING"
+    assert subiu["modelos"]["match"] == "erro"
+
+
+def test_subida_normal_registra_o_tempo_como_info(linhas_de_uso):
+    with TestClient(app):
+        pass
+    [subiu] = [linha for linha in linhas_de_uso if linha["evento"] == "api_subiu"]
+    assert subiu["severity"] == "INFO"
+    assert subiu["modelos"] == api.main.MODELOS_ESPERADOS
+    assert subiu["segundos"] >= 0
 
 
 def test_fixture_na_versao_atual_das_features(pecas):

@@ -337,6 +337,13 @@ Acrescente `severity>=ERROR` (erros), `jsonPayload.ms>5000` (pedidos lentos),
 starts). Os números do lado do app (contas, peças, favoritos, rejeições, usos)
 estão em `supabase/metricas.sql`.
 
+O Cloud Run guarda à parte o próprio log de requisições
+(`run.googleapis.com/requests`), e esse log tem o IP de quem chama. Ele fica
+30 dias no bucket `_Default` do Cloud Logging. Para não guardar o IP, crie uma
+exclusão no Log Router com o filtro
+`logName:"run.googleapis.com%2Frequests"`. O registro acima já cobre rota,
+status e tempo.
+
 ### Testes
 
 Testam o contrato entre o app e a API: o formato que o app manda e espera

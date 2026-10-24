@@ -71,7 +71,16 @@ async def lifespan(app: FastAPI):
     # Quanto do cold start e carregar os modelos (o resto e o Cloud Run
     # subindo o container), pra medir o #15 e o aviso do app (#25).
     segundos = round(time.perf_counter() - inicio, 1)
-    registrar("api_subiu", f"API pronta em {segundos}s", segundos=segundos, modelos=app.state.modelos)
+    # Modelo que nao carregou e aviso: o /health fica "degradado", mas ninguem
+    # olha o /health se o app parece funcionar.
+    esperados = app.state.modelos == MODELOS_ESPERADOS
+    registrar(
+        "api_subiu",
+        f"API pronta em {segundos}s" + ("" if esperados else " com modelos fora do esperado"),
+        "INFO" if esperados else "WARNING",
+        segundos=segundos,
+        modelos=app.state.modelos,
+    )
     yield
 
 

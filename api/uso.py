@@ -4,6 +4,7 @@ campos aparecem em jsonPayload e `severity` vira o nivel), entao da pra
 filtrar e somar no Logs Explorer sem nenhuma dependencia nova.
 
 Nunca entra: token, corpo da requisicao, foto, IP, id de usuaria ou de peca.
+(O log de requisicoes do proprio Cloud Run tem o IP; ver README, secao API.)
 As rotas podem acrescentar contagens e as escolhas do pedido (ex.: ocasiao,
 numero de pecas) com `anotar()`: e o que falta no Supabase pra comparar looks
 pedidos x favoritados x rejeitados por ocasiao (supabase/metricas.sql).
