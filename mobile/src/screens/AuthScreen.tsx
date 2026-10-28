@@ -1,10 +1,10 @@
 import { isAuthApiError } from '@supabase/supabase-js';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { StyleSheet, Text, View } from 'react-native';
 
+import { AuthLayout } from '../components/AuthLayout';
 import { Button } from '../components/Button';
-import { StarShape } from '../components/StarShape';
+import { Field } from '../components/Field';
 import {
   RESET_SENT,
   recoveryErrorMessage,
@@ -12,7 +12,7 @@ import {
   type PasswordRecoveryApi,
 } from '../services/passwordRecovery';
 import { supabase } from '../services/supabase';
-import { colors, pinkBorder } from '../theme/colors';
+import { colors } from '../theme/colors';
 import { text } from '../theme/fonts';
 import { WelcomeScreen } from './WelcomeScreen';
 
@@ -97,7 +97,14 @@ interface AuthFormProps {
   onForgotPassword: () => void;
 }
 
-function AuthForm({ isSignUp, email, onEmailChange: setEmail, onBack, onSwitchMode, onForgotPassword }: AuthFormProps) {
+function AuthForm({
+  isSignUp,
+  email,
+  onEmailChange: setEmail,
+  onBack,
+  onSwitchMode,
+  onForgotPassword,
+}: AuthFormProps) {
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<ReturnType<typeof validateAuth>>({});
@@ -124,7 +131,10 @@ function AuthForm({ isSignUp, email, onEmailChange: setEmail, onBack, onSwitchMo
         // Com confirmação de e-mail ativada (padrão do Supabase) não há sessão imediata.
         if (!data.session) setInfoText('Cadastro feito! Confirme seu e-mail pra entrar.');
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+        const { error } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
         if (error) throw error;
       }
     } catch (e) {
@@ -139,68 +149,57 @@ function AuthForm({ isSignUp, email, onEmailChange: setEmail, onBack, onSwitchMo
   }
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <View style={{ alignSelf: 'flex-start' }}>
-        <Button label="← Voltar" variant="text" onPress={onBack} />
+    <AuthLayout onBack={onBack}>
+      <Text style={[text.headlineLarge, { marginVertical: 20 }]}>{isSignUp ? 'Criar conta' : 'Entrar'}</Text>
+
+      {isSignUp && (
+        <Field
+          label="Como você quer ser chamada?"
+          helper="Apelido ou nome — é assim que vamos te chamar no app."
+          value={name}
+          onChangeText={setName}
+          error={errors.name}
+          autoCapitalize="words"
+        />
+      )}
+      <Field
+        label="E-mail"
+        value={email}
+        onChangeText={setEmail}
+        error={errors.email}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoComplete="email"
+      />
+      <Field
+        label="Senha"
+        value={password}
+        onChangeText={setPassword}
+        error={errors.password}
+        secureTextEntry
+        autoCapitalize="none"
+        autoComplete={isSignUp ? 'new-password' : 'current-password'}
+      />
+      {!isSignUp && (
+        <View style={styles.forgot}>
+          <Button variant="text" label="Esqueci minha senha" onPress={onForgotPassword} />
+        </View>
+      )}
+
+      {errorText && <Text style={styles.error}>{errorText}</Text>}
+      {infoText && <Text style={styles.info}>{infoText}</Text>}
+
+      <View style={{ marginTop: 24 }}>
+        <Button label={isSignUp ? 'Cadastrar' : 'Entrar'} onPress={submit} loading={loading} />
       </View>
-      <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
-        <View style={styles.brandRow}>
-          <StarShape size={22} color={colors.wine} />
-          <Text style={[text.headlineMedium, styles.brand]}>Wable</Text>
-        </View>
-        <Text style={[text.headlineLarge, { marginVertical: 20 }]}>
-          {isSignUp ? 'Criar conta' : 'Entrar'}
-        </Text>
-
-        {isSignUp && (
-          <Field
-            label="Como você quer ser chamada?"
-            helper="Apelido ou nome — é assim que vamos te chamar no app."
-            value={name}
-            onChangeText={setName}
-            error={errors.name}
-            autoCapitalize="words"
-          />
-        )}
-        <Field
-          label="E-mail"
-          value={email}
-          onChangeText={setEmail}
-          error={errors.email}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoComplete="email"
+      <View style={{ marginTop: 12 }}>
+        <Button
+          variant="text"
+          label={isSignUp ? 'Já tem conta? Entrar' : 'Não tem conta? Cadastre-se'}
+          onPress={onSwitchMode}
         />
-        <Field
-          label="Senha"
-          value={password}
-          onChangeText={setPassword}
-          error={errors.password}
-          secureTextEntry
-          autoCapitalize="none"
-          autoComplete={isSignUp ? 'new-password' : 'current-password'}
-        />
-        {!isSignUp && (
-          <View style={styles.forgot}>
-            <Button variant="text" label="Esqueci minha senha" onPress={onForgotPassword} />
-          </View>
-        )}
-
-        {errorText && <Text style={styles.error}>{errorText}</Text>}
-        {infoText && <Text style={styles.info}>{infoText}</Text>}
-
-        <View style={{ marginTop: 24 }}>
-          <Button label={isSignUp ? 'Cadastrar' : 'Entrar'} onPress={submit} loading={loading} />
-        </View>
-        <View style={{ marginTop: 12 }}>
-          <Button
-            variant="text"
-            label={isSignUp ? 'Já tem conta? Entrar' : 'Não tem conta? Cadastre-se'}
-            onPress={onSwitchMode}
-          />
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+      </View>
+    </AuthLayout>
   );
 }
 
@@ -238,86 +237,36 @@ function ForgotPasswordForm({ initialEmail, initialError, recovery, onBack }: Fo
   }
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <View style={{ alignSelf: 'flex-start' }}>
-        <Button label="← Voltar" variant="text" onPress={onBack} />
-      </View>
-      <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
-        <View style={styles.brandRow}>
-          <StarShape size={22} color={colors.wine} />
-          <Text style={[text.headlineMedium, styles.brand]}>Wable</Text>
-        </View>
-        <Text style={[text.headlineLarge, { marginTop: 20, marginBottom: 8 }]}>Esqueci minha senha</Text>
-        <Text style={[text.bodyMedium, { marginBottom: 20 }]}>
-          Digite o e-mail da sua conta e enviamos um link para você criar uma senha nova.
-        </Text>
+    <AuthLayout onBack={onBack}>
+      <Text style={[text.headlineLarge, { marginTop: 20, marginBottom: 8 }]}>Esqueci minha senha</Text>
+      <Text style={[text.bodyMedium, { marginBottom: 20 }]}>
+        Digite o e-mail da sua conta e enviamos um link para você criar uma senha nova.
+      </Text>
 
-        <Field
-          label="E-mail"
-          value={email}
-          onChangeText={(value) => {
-            setEmail(value);
-            setSent(false);
-          }}
-          error={emailError}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoComplete="email"
-        />
-
-        {errorText && <Text style={styles.error}>{errorText}</Text>}
-        {sent && <Text style={styles.info}>{RESET_SENT}</Text>}
-
-        <View style={{ marginTop: 24 }}>
-          <Button label={sent ? 'Enviar de novo' : 'Enviar link'} onPress={submit} loading={loading} />
-        </View>
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
-
-interface FieldProps extends React.ComponentProps<typeof TextInput> {
-  label: string;
-  helper?: string;
-  error?: string;
-}
-
-export function Field({ label, helper, error, ...input }: FieldProps) {
-  return (
-    <View style={{ marginBottom: 16 }}>
-      <Text style={[text.bodyMedium, styles.label]}>{label}</Text>
-      <TextInput
-        {...input}
-        accessibilityLabel={label}
-        style={[styles.input, error ? { borderColor: colors.error } : null]}
+      <Field
+        label="E-mail"
+        value={email}
+        onChangeText={(value) => {
+          setEmail(value);
+          setSent(false);
+        }}
+        error={emailError}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoComplete="email"
       />
-      {error ? (
-        <Text style={styles.fieldError}>{error}</Text>
-      ) : helper ? (
-        <Text style={[text.bodyMedium, { fontSize: 12, marginTop: 4 }]}>{helper}</Text>
-      ) : null}
-    </View>
+
+      {errorText && <Text style={styles.error}>{errorText}</Text>}
+      {sent && <Text style={styles.info}>{RESET_SENT}</Text>}
+
+      <View style={{ marginTop: 24 }}>
+        <Button label={sent ? 'Enviar de novo' : 'Enviar link'} onPress={submit} loading={loading} />
+      </View>
+    </AuthLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.cream, paddingHorizontal: 28 },
-  form: { maxWidth: 380, width: '100%', alignSelf: 'center', paddingVertical: 20 },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  brand: { fontSize: 20, lineHeight: 22 },
-  label: { marginBottom: 6 },
-  input: {
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: pinkBorder,
-    borderRadius: 16,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    fontFamily: 'Quicksand_400Regular',
-    fontSize: 16,
-    color: colors.textDark,
-  },
-  fieldError: { color: colors.error, fontSize: 12, marginTop: 4 },
   error: { color: colors.error, marginTop: 12 },
   info: { color: colors.wine, marginTop: 12 },
   forgot: { alignSelf: 'flex-end', marginTop: -8 },

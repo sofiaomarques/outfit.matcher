@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { StyleSheet, Text, View } from 'react-native';
 
+import { AuthLayout } from '../components/AuthLayout';
 import { Button } from '../components/Button';
-import { StarShape } from '../components/StarShape';
+import { Field } from '../components/Field';
 import {
   recoveryErrorMessage,
   supabasePasswordRecovery,
@@ -12,7 +12,6 @@ import {
 } from '../services/passwordRecovery';
 import { colors } from '../theme/colors';
 import { text } from '../theme/fonts';
-import { Field } from './AuthScreen';
 
 interface ResetPasswordScreenProps {
   /** Senha salva: a pessoa segue pro app já logada. */
@@ -23,7 +22,11 @@ interface ResetPasswordScreenProps {
 }
 
 /** Aberta pelo link do e-mail de redefinição: pede a senha nova duas vezes. */
-export function ResetPasswordScreen({ onDone, onCancel, recovery = supabasePasswordRecovery() }: ResetPasswordScreenProps) {
+export function ResetPasswordScreen({
+  onDone,
+  onCancel,
+  recovery = supabasePasswordRecovery(),
+}: ResetPasswordScreenProps) {
   const [password, setPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
   const [errors, setErrors] = useState<ReturnType<typeof validateNewPassword>>({});
@@ -52,50 +55,37 @@ export function ResetPasswordScreen({ onDone, onCancel, recovery = supabasePassw
   }
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <View style={{ alignSelf: 'flex-start' }}>
-        <Button label="← Cancelar" variant="text" onPress={cancel} />
+    <AuthLayout backLabel="← Cancelar" onBack={cancel}>
+      <Text style={[text.headlineLarge, { marginVertical: 20 }]}>Criar nova senha</Text>
+
+      <Field
+        label="Nova senha"
+        value={password}
+        onChangeText={setPassword}
+        error={errors.password}
+        secureTextEntry
+        autoCapitalize="none"
+        autoComplete="new-password"
+      />
+      <Field
+        label="Confirmar senha"
+        value={confirmation}
+        onChangeText={setConfirmation}
+        error={errors.confirmation}
+        secureTextEntry
+        autoCapitalize="none"
+        autoComplete="new-password"
+      />
+
+      {errorText && <Text style={styles.error}>{errorText}</Text>}
+
+      <View style={{ marginTop: 24 }}>
+        <Button label="Salvar senha" onPress={submit} loading={loading} />
       </View>
-      <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
-        <View style={styles.brandRow}>
-          <StarShape size={22} color={colors.wine} />
-          <Text style={[text.headlineMedium, styles.brand]}>Wable</Text>
-        </View>
-        <Text style={[text.headlineLarge, { marginVertical: 20 }]}>Criar nova senha</Text>
-
-        <Field
-          label="Nova senha"
-          value={password}
-          onChangeText={setPassword}
-          error={errors.password}
-          secureTextEntry
-          autoCapitalize="none"
-          autoComplete="new-password"
-        />
-        <Field
-          label="Confirmar senha"
-          value={confirmation}
-          onChangeText={setConfirmation}
-          error={errors.confirmation}
-          secureTextEntry
-          autoCapitalize="none"
-          autoComplete="new-password"
-        />
-
-        {errorText && <Text style={styles.error}>{errorText}</Text>}
-
-        <View style={{ marginTop: 24 }}>
-          <Button label="Salvar senha" onPress={submit} loading={loading} />
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+    </AuthLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.cream, paddingHorizontal: 28 },
-  form: { maxWidth: 380, width: '100%', alignSelf: 'center', paddingVertical: 20 },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  brand: { fontSize: 20, lineHeight: 22 },
   error: { color: colors.error, marginTop: 12 },
 });

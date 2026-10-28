@@ -3,7 +3,7 @@ import { fireEvent, screen } from '@testing-library/react-native';
 
 import { EXPIRED_LINK, RESET_SENT, type PasswordRecoveryApi } from '../services/passwordRecovery';
 import { renderScreen } from '../test/render';
-import { AuthScreen } from './AuthScreen';
+import { AuthScreen, authErrorMessage, validateAuth } from './AuthScreen';
 
 let recovery: jest.Mocked<PasswordRecoveryApi>;
 
@@ -73,4 +73,21 @@ test('voltar do pedido de link leva ao login', async () => {
   await renderScreen(<AuthScreen initialMode="forgot" recovery={recovery} />);
   await fireEvent.press(screen.getByText('← Voltar'));
   expect(screen.getByText('Esqueci minha senha')).toBeTruthy();
+});
+describe('authErrorMessage', () => {
+  it('traduz credenciais inválidas', () => {
+    expect(authErrorMessage('Invalid login credentials')).toBe('E-mail ou senha incorretos.');
+  });
+
+  it('mantém mensagens desconhecidas', () => {
+    expect(authErrorMessage('Algo novo')).toBe('Algo novo');
+  });
+});
+
+describe('validateAuth', () => {
+  it('pede nome só no cadastro', () => {
+    const f = { name: ' ', email: 'a@b.c', password: '123456' };
+    expect(validateAuth(f, true).name).toBeDefined();
+    expect(validateAuth(f, false)).toEqual({});
+  });
 });
