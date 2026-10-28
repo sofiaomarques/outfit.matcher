@@ -14,6 +14,7 @@ export const NATIVE_RESET_URL = 'wable://redefinir-senha';
 const RESET_PATH_SEGMENT = 'redefinir-senha';
 
 export const NETWORK_ERROR = 'Não foi possível conectar. Tente de novo.';
+const GENERIC_ERROR = 'Algo deu errado. Tente de novo.';
 export const EXPIRED_LINK = 'Esse link expirou ou já foi usado. Peça um novo.';
 const RATE_LIMITED = 'Muitos pedidos seguidos. Espere alguns minutos e tente de novo.';
 export const RESET_SENT =
@@ -112,7 +113,7 @@ export function recoveryErrorMessage(e: unknown): string {
     case 'refresh_token_already_used':
       return EXPIRED_LINK;
     default:
-      return e.status === 429 ? RATE_LIMITED : e.message;
+      return e.status === 429 ? RATE_LIMITED : GENERIC_ERROR;
   }
 }
 

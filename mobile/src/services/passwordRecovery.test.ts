@@ -73,6 +73,10 @@ describe('recoveryErrorMessage', () => {
     expect(recoveryErrorMessage(apiError('session_not_found', 403))).toBe(EXPIRED_LINK);
   });
 
+  test('erro desconhecido do servidor não mostra a mensagem em inglês', () => {
+    expect(recoveryErrorMessage(apiError('algo_novo', 500))).toBe('Algo deu errado. Tente de novo.');
+  });
+
   test('falha de rede vira o aviso genérico', () => {
     expect(recoveryErrorMessage(new AuthRetryableFetchError('offline', 0))).toBe(NETWORK_ERROR);
     expect(recoveryErrorMessage(new Error('qualquer'))).toBe(NETWORK_ERROR);
