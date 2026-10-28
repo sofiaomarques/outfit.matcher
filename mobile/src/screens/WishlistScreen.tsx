@@ -12,6 +12,7 @@ import { WishlistRepository } from '../repositories/wishlistRepository';
 import { colors } from '../theme/colors';
 import { text } from '../theme/fonts';
 import { AddWishlistItemScreen } from './AddWishlistItemScreen';
+import { useBackNavigation } from '../services/backNavigation';
 
 type WishlistStore = Pick<WishlistRepository, 'fetchItems' | 'addItem' | 'deleteItem'>;
 
@@ -66,6 +67,8 @@ export function WishlistScreen({ repository }: { repository?: WishlistStore }) {
       toast('Não foi possível remover. Tente de novo.');
     }
   }
+
+  useBackNavigation(adding, () => setAdding(false));
 
   if (adding) {
     return (

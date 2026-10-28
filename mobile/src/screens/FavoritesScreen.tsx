@@ -14,6 +14,7 @@ import { outfitHistory, type OutfitHistory } from '../services/outfitHistory';
 import { colors } from '../theme/colors';
 import { text } from '../theme/fonts';
 import { OutfitDetailScreen } from './OutfitDetailScreen';
+import { useBackNavigation } from '../services/backNavigation';
 
 interface FavoritesScreenProps {
   repository?: Pick<WardrobeRepository, 'fetchItems'>;
@@ -102,6 +103,8 @@ export function FavoritesScreen({ repository, history = outfitHistory }: Favorit
         tags: [],
       }),
     );
+
+  useBackNavigation(detail !== null, () => setDetail(null));
 
   if (detail) {
     return (

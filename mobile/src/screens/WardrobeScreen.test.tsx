@@ -73,6 +73,7 @@ test('se salvar o favorito falha, recarrega do servidor', async () => {
 
   await waitFor(() => expect(repo.fetchItems).toHaveBeenCalledTimes(2));
   expect(await screen.findByLabelText('Favoritar peça')).toBeTruthy();
+  expect(screen.getByText('Não foi possível salvar o favorito.')).toBeTruthy();
 });
 
 test('o botão + abre o cadastro e voltar não recarrega', async () => {
