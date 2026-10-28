@@ -102,7 +102,7 @@ def test_health_degradado_com_o_login_desligado(cliente):
     assert corpo["status"] == "degradado"
 
 
-def test_health_degradado_quando_um_peso_nao_carrega(monkeypatch):
+def test_health_degradado_quando_um_peso_nao_carrega(monkeypatch, linhas_de_uso):
     def quebrado() -> str:
         raise RuntimeError("checkpoint corrompido")
 
@@ -112,6 +112,19 @@ def test_health_degradado_quando_um_peso_nao_carrega(monkeypatch):
     assert corpo["status"] == "degradado"
     assert corpo["modelos"]["match"] == "erro"
     assert corpo["modelos"]["categoria"] == "clip_ajustado"
+    # O registro de uso tambem avisa, sem depender de alguem abrir o /health.
+    [subiu] = [linha for linha in linhas_de_uso if linha["evento"] == "api_subiu"]
+    assert subiu["severity"] == "WARNING"
+    assert subiu["modelos"]["match"] == "erro"
+
+
+def test_subida_normal_registra_o_tempo_como_info(linhas_de_uso):
+    with TestClient(app):
+        pass
+    [subiu] = [linha for linha in linhas_de_uso if linha["evento"] == "api_subiu"]
+    assert subiu["severity"] == "INFO"
+    assert subiu["modelos"] == api.main.MODELOS_ESPERADOS
+    assert subiu["segundos"] >= 0
 
 
 def test_fixture_na_versao_atual_das_features(pecas):
@@ -138,6 +151,18 @@ def test_noite_devolve_looks_validos_com_detalhe_de_periodo(cliente, pecas, ocas
     _checar_looks(corpo["looks"], pecas)
     assert all(0 <= look["detalhes"]["periodo"] <= 1 for look in corpo["looks"])
     assert all(0 <= look["score"] <= 1 for look in corpo["looks"])
+
+
+def test_recomendacao_entra_no_registro_de_uso_sem_ids(cliente, pecas, linhas_de_uso):
+    # #20: ocasiao/clima/periodo e contagens pra comparar com favoritos e
+    # rejeicoes no Supabase; nenhum id de peca.
+    corpo = _recomendar(cliente, pecas, ocasiao="trabalho", clima="frio", periodo="noite", top_k=5)
+    [linha] = linhas_de_uso
+    assert (linha["rota"], linha["status"]) == ("/looks/recommend", 200)
+    assert (linha["ocasiao"], linha["clima"], linha["periodo"]) == ("trabalho", "frio", "noite")
+    assert (linha["pecas"], linha["pecas_ignoradas"], linha["looks"]) == (len(pecas), 0, len(corpo["looks"]))
+    assert linha["com_feedback"] is False
+    assert not any(p["id"] in str(linha) for p in pecas)
 
 
 def test_noite_prefere_cor_escura_com_o_resto_igual(pecas):

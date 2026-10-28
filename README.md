@@ -318,6 +318,32 @@ por `/looks/recommend` (422).
 | `ALLOWED_ORIGINS` | domínios do site, separados por vírgula (ex.: `https://wable.app`). Sem ela, o CORS libera só `localhost` |
 | `API_SEM_AUTH=1` | desliga o login; só pra dev local e testes |
 
+#### Registro de uso (#20)
+
+Cada requisição gera uma linha JSON no stdout (`api/uso.py`) com rota, status,
+tempo em ms e, no `/looks/recommend`, ocasião, clima, período e contagens
+(peças, looks, se veio feedback). Nunca entram token, corpo, foto, IP ou ids.
+Na subida, a linha `api_subiu` mostra quanto levou pra carregar os modelos.
+No Cloud Run as linhas viram logs estruturados; no Logs Explorer:
+
+```
+resource.type="cloud_run_revision" resource.labels.service_name="wable-api"
+jsonPayload.evento="requisicao"
+```
+
+Acrescente `severity>=ERROR` (erros), `jsonPayload.ms>5000` (pedidos lentos),
+`jsonPayload.rota="/looks/recommend"` (looks pedidos, com
+`jsonPayload.ocasiao`) ou troque por `jsonPayload.evento="api_subiu"` (cold
+starts). Os números do lado do app (contas, peças, favoritos, rejeições, usos)
+estão em `supabase/metricas.sql`.
+
+O Cloud Run guarda à parte o próprio log de requisições
+(`run.googleapis.com/requests`), e esse log tem o IP de quem chama. Ele fica
+30 dias no bucket `_Default` do Cloud Logging. Para não guardar o IP, crie uma
+exclusão no Log Router com o filtro
+`logName:"run.googleapis.com%2Frequests"`. O registro acima já cobre rota,
+status e tempo.
+
 ### Testes
 
 Testam o contrato entre o app e a API: o formato que o app manda e espera
