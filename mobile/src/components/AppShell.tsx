@@ -99,6 +99,8 @@ export function AppShell({ selectedIndex, onDestinationSelected, children }: App
               <Ionicons name={d.icon} size={22} color={selected ? colors.wine : colors.textMuted} />
               <Text
                 numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
                 style={[
                   styles.bottomLabel,
                   { color: selected ? colors.wine : colors.textMuted },

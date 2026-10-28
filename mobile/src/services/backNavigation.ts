@@ -73,7 +73,7 @@ export function useBackNavigation(active: boolean, onBack: () => void) {
   }, [active]);
 }
 
-const TAB_SLUGS = ['guarda-roupa', 'novo-look', 'looks', 'wishlist', 'favoritos', 'configuracoes'];
+const TAB_SLUGS = ['guarda-roupa', 'novo-look', 'looks', 'wishlist', 'configuracoes'];
 
 /** Aba aberta segundo o endereço (`#/looks`); 0 se não houver ou fora da web. */
 export function tabFromAddress(): number {

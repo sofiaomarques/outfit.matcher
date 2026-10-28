@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Chip } from '../components/Chip';
 import { colors } from '../theme/colors';
@@ -17,7 +16,7 @@ export function LooksHubScreen() {
   const [section, setSection] = useState<(typeof SECTIONS)[number]>('Sugeridos');
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <View style={styles.screen}>
       <View style={styles.switcher}>
         {SECTIONS.map((option) => (
           <Chip key={option} label={option} selected={section === option} onPress={() => setSection(option)} />
@@ -29,7 +28,7 @@ export function LooksHubScreen() {
       <View style={[styles.pane, section !== 'Favoritos' && styles.hidden]}>
         <FavoritesScreen />
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
