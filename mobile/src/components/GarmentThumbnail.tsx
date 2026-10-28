@@ -34,21 +34,27 @@ export const GarmentThumbnail = memo(function GarmentThumbnail({
   item: ClothingItem;
   size?: number;
 }) {
-  const [thumbFailed, setThumbFailed] = useState(false);
-  const [failed, setFailed] = useState(false);
+  // Guardam a URL que falhou, não um booleano: quando a assinatura renova, a nova URL tenta de novo.
+  const [thumbFailedFor, setThumbFailedFor] = useState<string>();
+  const [failedFor, setFailedFor] = useState<string>();
   const box = size ? { width: size, height: size } : styles.fill;
 
-  if (item.imageUrl && !failed) {
-    const uri = thumbFailed ? item.imageUrl : thumbnailUrl(item.imageUrl, size ? size * 2 : GRID_THUMB_PX);
+  if (item.imageUrl && failedFor !== item.imageUrl) {
+    const original = item.imageUrl;
+    const px = size ? size * 2 : GRID_THUMB_PX;
+    const useOriginal = thumbFailedFor === original;
+    const uri = useOriginal ? original : thumbnailUrl(original, px);
+    // A URL assinada muda a cada hora; sem chave própria o cache de disco jogaria as fotos fora a cada renovação.
+    const base = item.storagePath ?? item.id;
+    const cacheKey = uri === original ? `${base}:original` : `${base}:${px}`;
     return (
       <Image
         accessibilityLabel={item.name}
-        source={{ uri }}
+        source={{ uri, cacheKey }}
         cachePolicy="disk"
         contentFit="cover"
         transition={150}
-        recyclingKey={item.id}
-        onError={() => (thumbFailed || uri === item.imageUrl ? setFailed(true) : setThumbFailed(true))}
+        onError={() => (uri === original ? setFailedFor(original) : setThumbFailedFor(original))}
         style={[box, styles.image]}
       />
     );
