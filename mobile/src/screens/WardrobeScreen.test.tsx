@@ -63,7 +63,7 @@ test('favoritar muda na hora e salva no repositório', async () => {
   expect(repo.setFavorite).toHaveBeenCalledWith(expect.objectContaining({ id: '1' }), true);
 });
 
-test('se salvar o favorito falha, recarrega do servidor', async () => {
+test('se salvar o favorito falha, desfaz a peça e avisa', async () => {
   const repo = makeRepo([item('1', 'Blusa rosa', 'top')]);
   repo.setFavorite.mockRejectedValueOnce(new Error('offline'));
   await renderScreen(<WardrobeScreen repository={repo} />);
@@ -71,9 +71,9 @@ test('se salvar o favorito falha, recarrega do servidor', async () => {
 
   await fireEvent.press(screen.getByLabelText('Favoritar peça'));
 
-  await waitFor(() => expect(repo.fetchItems).toHaveBeenCalledTimes(2));
-  expect(await screen.findByLabelText('Favoritar peça')).toBeTruthy();
-  expect(screen.getByText('Não foi possível salvar o favorito.')).toBeTruthy();
+  expect(await screen.findByText('Não foi possível salvar o favorito.')).toBeTruthy();
+  expect(screen.getByLabelText('Favoritar peça')).toBeTruthy();
+  expect(repo.fetchItems).toHaveBeenCalledTimes(1);
 });
 
 test('o botão + abre o cadastro e voltar não recarrega', async () => {

@@ -39,7 +39,8 @@ function dismiss(overlay: Overlay) {
   // Já saiu da pilha: foi o próprio "voltar" que fechou a tela.
   if (index === -1) return;
   stack.splice(index, 1);
-  if (isWeb) {
+  // Só desfaz a entrada que nós empurramos; se o histórico já andou, não há popstate a esperar.
+  if (isWeb && window.history.state?.overlay) {
     ignoredPops++;
     window.history.back();
   }
@@ -51,7 +52,9 @@ function dismiss(overlay: Overlay) {
  */
 export function useBackNavigation(active: boolean, onBack: () => void) {
   const onBackRef = useRef(onBack);
-  onBackRef.current = onBack;
+  useEffect(() => {
+    onBackRef.current = onBack;
+  });
 
   useEffect(() => {
     if (!active) return;

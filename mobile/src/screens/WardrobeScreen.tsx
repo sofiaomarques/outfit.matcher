@@ -62,11 +62,14 @@ export function WardrobeScreen({ repository }: { repository?: WardrobeStore }) {
         await repo.setFavorite(item, isFavorite);
       } catch {
         if (!mounted.current) return;
+        // Desfaz só esta peça, sem recarregar a grade inteira.
+        setItems((current) =>
+          current.map((c) => (c.id === item.id ? { ...c, isFavorite: item.isFavorite } : c)),
+        );
         toast('Não foi possível salvar o favorito.');
-        load();
       }
     },
-    [repo, load, toast],
+    [repo, toast],
   );
 
   const renderGarment = useCallback(
