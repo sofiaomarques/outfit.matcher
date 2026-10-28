@@ -1,16 +1,16 @@
-# 👗 Outfit Matcher
+# Outfit Matcher
 
 Sistema de recomendação de outfits baseado em Machine Learning que analisa peças de roupa e sugere combinações compatíveis com base em features visuais extraídas automaticamente.
 
 ---
 
-## 🎯 Objetivo
+## Objetivo
 
 Dado um conjunto de imagens de roupas, o sistema extrai features visuais de cada peça e aprende a identificar quais peças combinam entre si, gerando um score de compatibilidade de 0 a 1.
 
 ---
 
-## 🧠 Como funciona
+## Como funciona
 
 ### Extração de Features
 
@@ -58,7 +58,7 @@ imagem
 
 ---
 
-## 📁 Estrutura do projeto
+## Estrutura do projeto
 
 ```
 outfit.matcher/
@@ -80,17 +80,27 @@ outfit.matcher/
 │
 ├── model/
 │   ├── preparar_dados.py    # lê dataset e cria pares de roupas
+│   ├── preparar_pares_v2.py # pares com rótulos por regra (modelo v2)
 │   ├── treinar.py           # treina o modelo de match
-│   └── recomendar.py        # monta e ordena looks (modelo + ocasião + clima)
+│   ├── treinar_categoria.py # treina o classificador de categoria
+│   ├── finetune_clip_categoria.py  # ajuste fino do CLIP para categoria
+│   ├── recomendar.py        # monta e ordena looks (modelo + ocasião + clima)
+│   └── feedback.py          # ajuste de gosto a partir do feedback da usuária
 │
-├── api/main.py              # API FastAPI usada pelo app
+├── api/
+│   ├── main.py              # API FastAPI usada pelo app
+│   └── auth.py              # validação do token do Supabase
 │
+├── supabase/                # schema.sql (tabelas, Storage e RLS) e migrações
 ├── scripts/
 │   ├── baixar_modelos.py    # baixa os pesos (.pt) do Hugging Face Hub
 │   └── subir_modelos.py     # envia os pesos depois de um retreino
 │
-├── app/                     # interface em Flutter (web + iOS + Android)
+├── tests/                   # contrato app/API, proteção e autenticação
+├── mobile/                  # interface em Expo/React Native (web + iOS + Android)
+├── app/                     # interface antiga em Flutter (referência)
 │
+├── Dockerfile               # imagem da API
 ├── main.py
 ├── requirements.txt
 └── README.md
@@ -98,7 +108,7 @@ outfit.matcher/
 
 ---
 
-## ⚙️ Instalação
+## Instalação
 
 ### Requisitos
 
@@ -181,7 +191,7 @@ docker run --rm -p 8000:7860 -e SUPABASE_URL=https://SEU-PROJETO.supabase.co out
 
 ---
 
-## 🚀 Como usar
+## Como usar
 
 ### Extrair features de uma imagem
 
@@ -272,7 +282,7 @@ PYTHONPATH=. python3 main.py foto1.jpg foto2.jpg foto3.jpg --ocasiao trabalho --
 
 ---
 
-## 🧩 Recomendação de looks
+## Recomendação de looks
 
 O modelo só responde "essa peça de cima combina com essa de baixo?". O
 recomendador (`model/recomendar.py`) monta os looks em cima disso:
@@ -337,7 +347,7 @@ e da cópia limpa do Kaggle).
 
 ---
 
-## 📦 Dependências principais
+## Dependências principais
 
 | Biblioteca | Uso |
 |---|---|
@@ -351,7 +361,7 @@ e da cópia limpa do Kaggle).
 
 ---
 
-## 📊 Dataset
+## Dataset
 
 O projeto usa o **Fashion Product Images (Small)** disponível no Kaggle:
 - 44.441 imagens de produtos de moda
@@ -360,7 +370,7 @@ O projeto usa o **Fashion Product Images (Small)** disponível no Kaggle:
 
 ---
 
-## 🔬 Modelo
+## Modelo
 
 O sistema usa uma abordagem **híbrida**:
 
@@ -371,18 +381,22 @@ Os dois são concatenados em um vetor de **523 dimensões** que representa cada 
 
 ---
 
-## 📱 Interface
+## Interface
 
-A interface (web + iOS + Android) está sendo migrada de Flutter ([`app/`](app/))
-para Expo/React Native em [`mobile/`](mobile/README.md), que também gera o site
-(imagem pro Cloud Run em `mobile/Dockerfile`). Enquanto a migração não termina,
-o Flutter segue como referência.
-O guarda-roupa fica no Supabase; a análise das fotos e as sugestões de look
-vêm da API acima — veja [`app/README.md`](app/README.md) pra rodar.
+O app (web + iOS + Android) é feito em Expo/React Native em
+[`mobile/`](mobile/README.md), e o mesmo código gera o site (imagem pro Cloud
+Run em `mobile/Dockerfile`). Ele tem login (com recuperação de senha por
+e-mail), guarda-roupa, looks, favoritos e wishlist. O guarda-roupa e as fotos
+ficam no Supabase (Postgres, Storage e Auth; o schema está em
+[`supabase/`](supabase/)); a análise das fotos e as sugestões de look vêm da
+API acima.
+
+O app em Flutter ([`app/`](app/README.md)) foi o primeiro cliente e fica só
+como referência enquanto a migração termina.
 
 ---
 
-## 👩‍💻 Autora
+## Autora
 
 Sofia de Oliveira Marques  
 Projeto universitário — Machine Learning aplicado à moda <3
