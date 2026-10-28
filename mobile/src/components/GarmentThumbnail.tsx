@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { memo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { PixelRatio, StyleSheet, View } from 'react-native';
 
 import { categoryInfo } from '../models/clothingCategory';
 import { swatchToHex, type ClothingItem } from '../models/clothingItem';
@@ -9,6 +9,18 @@ import { colors } from '../theme/colors';
 
 /** Lado (px) da miniatura pedida ao Storage quando o tamanho não é fixo: célula máxima do grid (220) em 2x. */
 const GRID_THUMB_PX = 440;
+
+/**
+ * Vira true na primeira miniatura que o Storage não serve (plano sem image
+ * transformations): dali em diante pedimos a original direto, sem gastar uma
+ * requisição que falha por peça a cada montagem do grid.
+ */
+let transformsUnavailable = false;
+
+/** Só para os testes: volta ao estado inicial do módulo. */
+export function resetTransformsUnavailable() {
+  transformsUnavailable = false;
+}
 
 /**
  * Troca a URL assinada de `/object/sign/` pela de `/render/image/sign/`, que
@@ -41,8 +53,8 @@ export const GarmentThumbnail = memo(function GarmentThumbnail({
 
   if (item.imageUrl && failedFor !== item.imageUrl) {
     const original = item.imageUrl;
-    const px = size ? size * 2 : GRID_THUMB_PX;
-    const useOriginal = thumbFailedFor === original;
+    const px = size ? Math.ceil(size * PixelRatio.get()) : GRID_THUMB_PX;
+    const useOriginal = transformsUnavailable || thumbFailedFor === original;
     const uri = useOriginal ? original : thumbnailUrl(original, px);
     // A URL assinada muda a cada hora; sem chave própria o cache de disco jogaria as fotos fora a cada renovação.
     const base = item.storagePath ?? item.id;
@@ -54,7 +66,11 @@ export const GarmentThumbnail = memo(function GarmentThumbnail({
         cachePolicy="disk"
         contentFit="cover"
         transition={150}
-        onError={() => (uri === original ? setFailedFor(original) : setThumbFailedFor(original))}
+        onError={() => {
+          if (uri === original) return setFailedFor(original);
+          transformsUnavailable = true;
+          setThumbFailedFor(original);
+        }}
         style={[box, styles.image]}
       />
     );

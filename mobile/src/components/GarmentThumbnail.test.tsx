@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { ClothingItem } from '../models/clothingItem';
-import { GarmentThumbnail, thumbnailUrl } from './GarmentThumbnail';
+import { GarmentThumbnail, resetTransformsUnavailable, thumbnailUrl } from './GarmentThumbnail';
 
 const SIGNED = 'https://x.supabase.co/storage/v1/object/sign/clothing-images/u/1.png?token=abc';
 
@@ -32,6 +32,8 @@ describe('thumbnailUrl', () => {
 });
 
 describe('GarmentThumbnail', () => {
+  beforeEach(resetTransformsUnavailable);
+
   it('pede a miniatura com chave de cache estável (sem o token)', async () => {
     await render(<GarmentThumbnail item={item()} />);
     const source = screen.getByLabelText('Camisa').props.source[0];
@@ -48,6 +50,13 @@ describe('GarmentThumbnail', () => {
 
     await fireEvent(screen.getByLabelText('Camisa'), 'error', { nativeEvent: { error: 'falhou' } });
     expect(screen.queryByLabelText('Camisa')).toBeNull();
+  });
+
+  it('depois de uma miniatura falhar, as próximas peças já pedem a original', async () => {
+    await render(<GarmentThumbnail item={item()} />);
+    await fireEvent(screen.getByLabelText('Camisa'), 'error', { nativeEvent: { error: 'falhou' } });
+    await render(<GarmentThumbnail item={item({ id: '2', name: 'Saia', storagePath: 'u/2.png' })} />);
+    expect(screen.getByLabelText('Saia').props.source[0].uri).toBe(SIGNED);
   });
 
   it('sem foto, mostra o placeholder', async () => {
