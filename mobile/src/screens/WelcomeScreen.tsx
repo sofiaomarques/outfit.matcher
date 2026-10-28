@@ -1,8 +1,12 @@
 import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Backdrop } from '../components/Backdrop';
 import { Button } from '../components/Button';
+import { CheckerStrip } from '../components/CheckerStrip';
+import { PaintedHeart } from '../components/PaintedHeart';
 import { StarShape } from '../components/StarShape';
+import { WavyFrame } from '../components/WavyFrame';
 import { colors } from '../theme/colors';
 import { text } from '../theme/fonts';
 
@@ -19,37 +23,46 @@ export function WelcomeScreen({ onLogin, onSignUp }: WelcomeScreenProps) {
 
   return (
     <SafeAreaView style={styles.screen}>
+      <Backdrop />
       {showDecorations && (
         <View style={styles.sticker} pointerEvents="none">
-          <StarShape size={84} color={colors.wine} rotation={-0.15} />
+          <PaintedHeart size={96} color={colors.cherry} rotation={0.2} />
         </View>
       )}
       <View style={styles.topBar}>
-        <StarShape size={24} color={colors.wine} />
+        <StarShape size={24} color={colors.cherry} />
         <Text style={[text.headlineMedium, styles.brand]}>Wable</Text>
         <View style={{ flex: 1 }} />
         <Button label="Entrar" variant="text" onPress={onLogin} />
         <Button label="Cadastrar" onPress={onSignUp} />
       </View>
       <ScrollView contentContainerStyle={styles.hero}>
-        <Text style={text.displayLarge}>{'Seu guarda-roupa,\nmais inteligente.'}</Text>
-        <Text style={styles.subtitle}>
-          Combine suas peças, descubra novos looks e aproveite o que você já tem.
-        </Text>
-        <View style={styles.cta}>
-          <Button label="Começar →" onPress={onSignUp} />
-        </View>
+        <WavyFrame style={styles.card}>
+          <PaintedHeart size={34} color={colors.cherry} rotation={-0.2} />
+          <Text style={text.displayLarge}>{'Seu guarda-roupa,\nmais inteligente.'}</Text>
+          <Text style={styles.subtitle}>
+            Combine suas peças, descubra novos looks e aproveite o que você já tem.
+          </Text>
+          <View style={styles.cta}>
+            <Button label="Começar →" onPress={onSignUp} />
+          </View>
+        </WavyFrame>
       </ScrollView>
+      <View style={styles.checker}>
+        <CheckerStrip height={12} />
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.cream, paddingHorizontal: 28, paddingVertical: 20 },
-  sticker: { position: 'absolute', top: 84, right: 28 },
+  screen: { flex: 1, backgroundColor: colors.paper, paddingHorizontal: 20, paddingVertical: 20 },
+  sticker: { position: 'absolute', top: 120, right: 36 },
+  checker: { marginHorizontal: -20, marginBottom: -20 },
+  card: { maxWidth: 480, width: '100%' },
   topBar: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  brand: { fontSize: 20, lineHeight: 22 },
-  hero: { flexGrow: 1, justifyContent: 'center', maxWidth: 480 },
+  brand: { fontSize: 20, lineHeight: 28 },
+  hero: { flexGrow: 1, justifyContent: 'center', paddingVertical: 16 },
   subtitle: {
     marginTop: 20,
     fontFamily: 'Nunito_600SemiBold',
