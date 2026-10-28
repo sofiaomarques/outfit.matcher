@@ -321,8 +321,9 @@ por `/looks/recommend` (422).
 ### Testes
 
 Testam o contrato entre o app e a API: o formato que o app manda e espera
-receber, que as constantes repetidas no Dart (`featuresVersion`, ocasiões,
-climas, categorias) batem com as do Python, e que a API está com os modelos de
+receber, que as constantes repetidas no app (versão das features, ocasiões,
+climas, categorias) batem com as do Python — no Expo (`mobile/`) e, enquanto
+existir, no Flutter (`app/`) — e que a API está com os modelos de
 produção (precisa dos pesos baixados). Rode da raiz do repo:
 
 ```bash
