@@ -331,6 +331,17 @@ pip install -r requirements-dev.txt
 python -m pytest
 ```
 
+No GitHub, `.github/workflows/testes.yml` roda em todo PR e push na `main`:
+typecheck + jest do `mobile/` e o `pytest` da API. O da API precisa do secret
+`HF_TOKEN` (token de **leitura** do Hugging Face) pra baixar os pesos; sem ele,
+o job avisa e pula. A revisão dos pesos vem da variável `MODELOS_REVISAO` do
+repositório (padrão `main`):
+
+```bash
+gh secret set HF_TOKEN
+gh variable set MODELOS_REVISAO --body <hash do commit no Hub>
+```
+
 O guarda-roupa de teste (`tests/fixtures/guarda_roupa.json`) é a saída real de
 `/items/analyze`. Quando `VERSAO_FEATURES` mudar, gere de novo com
 `PYTHONPATH=. python tests/gerar_fixture.py` (precisa de `dados/validacao_real/`

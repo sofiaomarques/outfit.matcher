@@ -1,0 +1,90 @@
+# Testes em todo PR e em todo push na main (#18). O deploy automatico vem
+# depois, quando a API e o site estiverem no Cloud Run.
+#
+# - mobile: typecheck + jest do app Expo (mobile/), sem nenhum segredo.
+# - api: pytest da raiz (contrato app <-> API, recomendador, login). Precisa
+#   dos pesos .pt, que estao num repositorio privado do Hugging Face Hub: sem o
+#   secret HF_TOKEN (token de LEITURA) o job avisa e pula em vez de falhar.
+#   Configure com: gh secret set HF_TOKEN
+name: Testes
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Um push novo no mesmo PR cancela a rodada anterior.
+concurrency:
+  group: testes-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  mobile:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npx jest --ci
+
+  api:
+    runs-on: ubuntu-latest
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      # Mesma revisao dos pesos que o deploy usa; sem a variavel, a main do Hub.
+      MODELOS_REVISAO: ${{ vars.MODELOS_REVISAO || 'main' }}
+    steps:
+      - name: Confere o HF_TOKEN
+        id: token
+        run: |
+          if [ -n "$HF_TOKEN" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Sem o secret HF_TOKEN os pesos nao baixam: testes da API pulados. Configure com 'gh secret set HF_TOKEN'."
+          fi
+      - uses: actions/checkout@v5
+        if: steps.token.outputs.ok
+      - uses: actions/setup-python@v6
+        if: steps.token.outputs.ok
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+      # libGL/glib: o opencv-python precisa mesmo sem janela (igual ao Dockerfile).
+      - name: Dependencias
+        if: steps.token.outputs.ok
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libgl1 libglib2.0-0
+          # torch pela index da CPU: o do PyPI no Linux puxa as wheels com CUDA.
+          pip install --index-url https://download.pytorch.org/whl/cpu \
+            "torch==$(grep -i '^torch==' requirements.txt | cut -d= -f3)"
+          pip install -r requirements-dev.txt
+      # CLIP (Hub publico) e rembg (u2net) baixam na primeira execucao; o cache
+      # poupa ~1 GB de download por rodada. Os .pt proprios (~120 MB) ficam
+      # fora: com a revisao "main", o cache serviria um peso antigo.
+      - uses: actions/cache@v4
+        if: steps.token.outputs.ok
+        with:
+          path: |
+            ~/.cache/huggingface/hub/models--openai--clip-vit-base-patch32
+            ~/.u2net
+          key: modelos-terceiros-${{ hashFiles('requirements.txt') }}
+      - name: Pesos dos modelos
+        if: steps.token.outputs.ok
+        run: python scripts/baixar_modelos.py
+      - name: pytest
+        if: steps.token.outputs.ok
+        run: python -m pytest -q
