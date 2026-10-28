@@ -8,14 +8,12 @@ import { GridList } from '../components/GridList';
 import { GarmentThumbnail } from '../components/GarmentThumbnail';
 import { PaintedHeart } from '../components/PaintedHeart';
 import { StatusMessage } from '../components/StatusMessage';
-import { useToast } from '../components/Toast';
 import { CLOTHING_CATEGORIES, categoryInfo, type ClothingCategory } from '../models/clothingCategory';
 import type { ClothingItem } from '../models/clothingItem';
 import { WardrobeRepository } from '../repositories/wardrobeRepository';
 import { colors } from '../theme/colors';
 import { text } from '../theme/fonts';
 import { AddItemScreen } from './AddItemScreen';
-import { useBackNavigation } from '../services/backNavigation';
 
 const PADDING = 24;
 
@@ -24,7 +22,6 @@ type WardrobeStore = Pick<WardrobeRepository, 'fetchItems' | 'setFavorite' | 'ad
 /** Tela "Meu guarda-roupa": grid de peças filtrável por categoria, carregadas do Supabase. */
 export function WardrobeScreen({ repository }: { repository?: WardrobeStore }) {
   const repo = useMemo(() => repository ?? new WardrobeRepository(), [repository]);
-  const toast = useToast();
   const [selected, setSelected] = useState<ClothingCategory | null>(null);
   const [items, setItems] = useState<ClothingItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,12 +58,10 @@ export function WardrobeScreen({ repository }: { repository?: WardrobeStore }) {
       try {
         await repo.setFavorite(item, isFavorite);
       } catch {
-        if (!mounted.current) return;
-        toast('Não foi possível salvar o favorito.');
-        load();
+        if (mounted.current) load();
       }
     },
-    [repo, load, toast],
+    [repo, load],
   );
 
   const renderGarment = useCallback(
@@ -75,8 +70,6 @@ export function WardrobeScreen({ repository }: { repository?: WardrobeStore }) {
   );
 
   const visible = selected ? items.filter((item) => item.category === selected) : items;
-
-  useBackNavigation(adding, () => setAdding(false));
 
   if (adding) {
     return (
