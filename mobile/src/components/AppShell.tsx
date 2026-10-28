@@ -5,6 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { colors } from '../theme/colors';
 import { text } from '../theme/fonts';
+import { Backdrop } from './Backdrop';
+import { CheckerStrip } from './CheckerStrip';
 import { StarShape } from './StarShape';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -37,10 +39,11 @@ export function AppShell({ selectedIndex, onDestinationSelected, children }: App
   if (isWide) {
     return (
       <View style={styles.row}>
+        <Backdrop tone="soft" />
         <View style={styles.sideNav}>
           <View style={styles.brandRow}>
-            <StarShape size={22} color={colors.wine} />
-            <Text style={[text.headlineMedium, { fontSize: 22, lineHeight: 22 }]}>Wable</Text>
+            <StarShape size={22} color={colors.cherry} />
+            <Text style={[text.headlineMedium, { fontSize: 22, lineHeight: 30 }]}>Wable</Text>
           </View>
           {appDestinations.map((d, i) => {
             const selected = i === selectedIndex;
@@ -77,7 +80,9 @@ export function AppShell({ selectedIndex, onDestinationSelected, children }: App
 
   return (
     <SafeAreaView style={styles.column}>
+      <Backdrop tone="soft" />
       <View style={styles.body}>{children}</View>
+      <CheckerStrip height={8} />
       <View style={styles.bottomNav}>
         {appDestinations.map((d, i) => {
           const selected = i === selectedIndex;
@@ -100,8 +105,8 @@ export function AppShell({ selectedIndex, onDestinationSelected, children }: App
 }
 
 const styles = StyleSheet.create({
-  row: { flex: 1, flexDirection: 'row', backgroundColor: colors.cream },
-  column: { flex: 1, backgroundColor: colors.cream },
+  row: { flex: 1, flexDirection: 'row', backgroundColor: colors.paper },
+  column: { flex: 1, backgroundColor: colors.paper },
   body: { flex: 1 },
   sideNav: {
     width: 240,
@@ -109,16 +114,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 24,
     gap: 8,
-    borderRightWidth: StyleSheet.hairlineWidth,
-    borderRightColor: colors.pink,
+    borderRightWidth: 3,
+    borderRightColor: colors.rose,
   },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 24, paddingHorizontal: 8 },
-  tile: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 14 },
+  tile: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 24 },
   bottomNav: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     backgroundColor: colors.white,
     paddingVertical: 8,
   },
-  bottomItem: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16 },
+  bottomItem: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
 });
