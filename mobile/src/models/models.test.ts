@@ -1,6 +1,6 @@
 import { categoryFromName } from './clothingCategory';
 import { hexToSwatch, swatchToHex } from './clothingItem';
-import { displayNameOf } from '../services/currentUser';
+import { displayNameOf, isAccountSwitch } from '../services/currentUser';
 
 test('swatch ARGB vai e volta de #rrggbb', () => {
   expect(swatchToHex(0xff7a1836)).toBe('#7a1836');
@@ -25,5 +25,16 @@ describe('displayNameOf', () => {
   test('sem usuário nem e-mail, vazio', () => {
     expect(displayNameOf(null)).toBe('');
     expect(displayNameOf({ email: undefined, user_metadata: {} })).toBe('');
+  });
+});
+
+describe('isAccountSwitch', () => {
+  test('só é troca quando uma conta entra no lugar de outra', () => {
+    expect(isAccountSwitch('conta-a', 'conta-b')).toBe(true);
+    expect(isAccountSwitch('conta-a', 'conta-a')).toBe(false);
+    // Primeiro login, ou saída: o SIGNED_OUT já zera o estado.
+    expect(isAccountSwitch(null, 'conta-a')).toBe(false);
+    expect(isAccountSwitch(undefined, 'conta-a')).toBe(false);
+    expect(isAccountSwitch('conta-a', null)).toBe(false);
   });
 });
