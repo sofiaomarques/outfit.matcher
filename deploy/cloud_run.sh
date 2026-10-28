@@ -201,10 +201,11 @@ cmd_site() {
     versao="$(tag_da_imagem)"
     imagem="$REGISTRO/site:$versao"
 
+    # Separador "@": o link do feedback pode ter virgula.
     echo "== Build do site ($imagem), apontando pra API em $api_url"
     # A anon key e publica por design (o RLS protege); fica no historico do Cloud Build.
     gc builds submit "$RAIZ/mobile" --config "$RAIZ/deploy/cloudbuild-site.yaml" \
-        --substitutions "_IMAGEM=$imagem,_SUPABASE_URL=$SUPABASE_URL,_SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY,_API_BASE_URL=$api_url,_APP_VERSION=$versao,_FEEDBACK_URL=${FEEDBACK_URL:-}"
+        --substitutions "^@^_IMAGEM=$imagem@_SUPABASE_URL=$SUPABASE_URL@_SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY@_API_BASE_URL=$api_url@_APP_VERSION=$versao@_FEEDBACK_URL=${FEEDBACK_URL:-}"
 
     echo "== Deploy do site"
     gc run deploy "$SITE_SERVICE" --image "$imagem" --region "$REGION" \
