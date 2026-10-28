@@ -21,6 +21,7 @@ import {
 import { colors } from '../theme/colors';
 import { text } from '../theme/fonts';
 import { OutfitDetailScreen } from './OutfitDetailScreen';
+import { useBackNavigation } from '../services/backNavigation';
 
 const SUGGESTION_COUNT = 5;
 const LOADING_WARDROBE = 'Carregando seu guarda-roupa...';
@@ -163,6 +164,8 @@ export function NewLookScreen({ displayName = '', recommender, history = outfitH
     });
     if (remaining.length === 0 && !latest.current.loading && items) recommend(items, label);
   }
+
+  useBackNavigation(detail !== null, () => setDetail(null));
 
   if (detail) {
     return <OutfitDetailScreen outfit={detail} history={history} onBack={() => setDetail(null)} />;

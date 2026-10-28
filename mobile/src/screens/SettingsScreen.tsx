@@ -39,7 +39,11 @@ export function SettingsScreen({
 
   useEffect(() => {
     mounted.current = true;
-    repo.email().then((value) => mounted.current && setEmail(value));
+    repo
+      .email()
+      .then((value) => mounted.current && setEmail(value))
+      // Só mostra "Conta sem e-mail"; a pessoa não pediu nada que tenha falhado.
+      .catch(() => {});
     return () => {
       mounted.current = false;
     };

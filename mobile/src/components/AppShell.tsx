@@ -11,13 +11,13 @@ import { StarShape } from './StarShape';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
-export const appDestinations: { icon: IconName; label: string }[] = [
-  { icon: 'shirt-outline', label: 'Meu guarda-roupa' },
-  { icon: 'sparkles-outline', label: 'Novo look' },
-  { icon: 'star-outline', label: 'Looks' },
-  { icon: 'cart-outline', label: 'Wishlist' },
-  { icon: 'heart-outline', label: 'Favoritos' },
-  { icon: 'settings-outline', label: 'Configurações' },
+/** `shortLabel` é o rótulo da barra inferior, que tem pouco espaço por item. */
+export const appDestinations: { icon: IconName; label: string; shortLabel: string; slug: string }[] = [
+  { icon: 'shirt-outline', label: 'Meu guarda-roupa', shortLabel: 'Guarda-roupa', slug: 'guarda-roupa' },
+  { icon: 'sparkles-outline', label: 'Novo look', shortLabel: 'Novo look', slug: 'novo-look' },
+  { icon: 'star-outline', label: 'Looks', shortLabel: 'Looks', slug: 'looks' },
+  { icon: 'cart-outline', label: 'Wishlist', shortLabel: 'Wishlist', slug: 'wishlist' },
+  { icon: 'settings-outline', label: 'Configurações', shortLabel: 'Ajustes', slug: 'configuracoes' },
 ];
 
 const WIDE_BREAKPOINT = 840;
@@ -51,6 +51,7 @@ export function AppShell({ selectedIndex, onDestinationSelected, children }: App
               <Pressable
                 key={d.label}
                 accessibilityRole="tab"
+                accessibilityLabel={d.label}
                 accessibilityState={{ selected }}
                 onPress={() => onDestinationSelected(i)}
                 style={[styles.tile, selected && { backgroundColor: colors.pinkLight }]}
@@ -96,6 +97,18 @@ export function AppShell({ selectedIndex, onDestinationSelected, children }: App
               style={[styles.bottomItem, selected && { backgroundColor: colors.pinkLight }]}
             >
               <Ionicons name={d.icon} size={22} color={selected ? colors.wine : colors.textMuted} />
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
+                style={[
+                  styles.bottomLabel,
+                  { color: selected ? colors.wine : colors.textMuted },
+                  selected && { fontFamily: 'Quicksand_700Bold' },
+                ]}
+              >
+                {d.shortLabel}
+              </Text>
             </Pressable>
           );
         })}
@@ -118,12 +131,21 @@ const styles = StyleSheet.create({
     borderRightColor: colors.rose,
   },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 24, paddingHorizontal: 8 },
-  tile: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 24 },
+  tile: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, minHeight: 44, borderRadius: 24 },
   bottomNav: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
     backgroundColor: colors.white,
-    paddingVertical: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+    gap: 2,
   },
-  bottomItem: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
+  bottomItem: {
+    flex: 1,
+    minHeight: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    borderRadius: 16,
+  },
+  bottomLabel: { fontFamily: 'Quicksand_600SemiBold', fontSize: 11 },
 });

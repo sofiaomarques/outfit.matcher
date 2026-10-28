@@ -8,8 +8,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppShell, appDestinations } from './src/components/AppShell';
 import { ToastProvider, useToast } from './src/components/Toast';
 import { AuthScreen } from './src/screens/AuthScreen';
-import { FavoritesScreen } from './src/screens/FavoritesScreen';
-import { LooksScreen } from './src/screens/LooksScreen';
+import { LooksHubScreen } from './src/screens/LooksHubScreen';
 import { NewLookScreen } from './src/screens/NewLookScreen';
 import { ResetPasswordScreen } from './src/screens/ResetPasswordScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
@@ -17,6 +16,7 @@ import { WardrobeScreen } from './src/screens/WardrobeScreen';
 import { WishlistScreen } from './src/screens/WishlistScreen';
 import { isSupabaseConfigured } from './src/services/apiConfig';
 import { apiStatus } from './src/services/apiStatus';
+import { VisibleContext, saveTabInAddress, tabFromAddress } from './src/services/backNavigation';
 import { displayNameOf, isAccountSwitch } from './src/services/currentUser';
 import { outfitHistory } from './src/services/outfitHistory';
 import {
@@ -68,6 +68,8 @@ function MissingConfigScreen() {
  * Onde está o fluxo do link de "Esqueci minha senha": abrindo a sessão do
  * link, pedindo a senha nova, ou o link não valeu (expirado, já usado).
  */
+const tabSlugs = appDestinations.map((d) => d.slug);
+
 type Recovery =
   | { step: 'none' }
   | { step: 'starting' }
@@ -81,12 +83,16 @@ type Recovery =
  */
 function RootNavigator() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectedIndex, setSelectedIndex] = useState(() => tabFromAddress(tabSlugs));
   // Muda depois de "Apagar meus dados": a key nova recria as outras telas,
   // que carregam de novo (agora vazias).
   const [dataVersion, setDataVersion] = useState(0);
   const [recovery, setRecovery] = useState<Recovery>({ step: 'none' });
   const showToast = useToast();
+  function selectTab(index: number) {
+    setSelectedIndex(index);
+    saveTabInAddress(tabSlugs, index);
+  }
   // De quem é o estado em memória (histórico de looks, guarda-roupa em análise).
   const userIdRef = useRef<string | null | undefined>(undefined);
 
@@ -95,7 +101,7 @@ function RootNavigator() {
     function forgetAccount() {
       outfitHistory.reset();
       RecommendationService.reset();
-      setSelectedIndex(0);
+      selectTab(0);
       setDataVersion((v) => v + 1);
     }
 
@@ -197,26 +203,26 @@ function RootNavigator() {
   }
 
   return (
-    <AppShell selectedIndex={selectedIndex} onDestinationSelected={setSelectedIndex}>
+    <AppShell selectedIndex={selectedIndex} onDestinationSelected={selectTab}>
       {/* Todas ficam montadas (como o IndexedStack do Flutter): trocar de aba não recarrega. */}
       {appDestinations.map((destination, index) => (
         <View
           key={`${destination.label}-${dataVersion}`}
           style={[styles.pane, index !== selectedIndex && styles.hidden]}
         >
+          <VisibleContext.Provider value={index === selectedIndex}>
           {index === 0 ? (
             <WardrobeScreen />
           ) : index === 1 ? (
             <NewLookScreen displayName={displayNameOf(session.user)} />
           ) : index === 2 ? (
-            <LooksScreen />
+            <LooksHubScreen />
           ) : index === 3 ? (
             <WishlistScreen />
-          ) : index === 4 ? (
-            <FavoritesScreen />
           ) : index === appDestinations.length - 1 ? (
             <SettingsScreen onDataErased={onDataErased} />
           ) : null}
+          </VisibleContext.Provider>
         </View>
       ))}
     </AppShell>

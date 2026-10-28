@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -8,12 +8,14 @@ import { GridList } from '../components/GridList';
 import { GarmentThumbnail } from '../components/GarmentThumbnail';
 import { PaintedHeart } from '../components/PaintedHeart';
 import { StatusMessage } from '../components/StatusMessage';
+import { useToast } from '../components/Toast';
 import { CLOTHING_CATEGORIES, categoryInfo, type ClothingCategory } from '../models/clothingCategory';
 import type { ClothingItem } from '../models/clothingItem';
 import { WardrobeRepository } from '../repositories/wardrobeRepository';
 import { colors } from '../theme/colors';
 import { text } from '../theme/fonts';
 import { AddItemScreen } from './AddItemScreen';
+import { useBackNavigation } from '../services/backNavigation';
 
 const PADDING = 24;
 
@@ -22,6 +24,7 @@ type WardrobeStore = Pick<WardrobeRepository, 'fetchItems' | 'setFavorite' | 'ad
 /** Tela "Meu guarda-roupa": grid de peças filtrável por categoria, carregadas do Supabase. */
 export function WardrobeScreen({ repository }: { repository?: WardrobeStore }) {
   const repo = useMemo(() => repository ?? new WardrobeRepository(), [repository]);
+  const toast = useToast();
   const [selected, setSelected] = useState<ClothingCategory | null>(null);
   const [items, setItems] = useState<ClothingItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,17 +54,32 @@ export function WardrobeScreen({ repository }: { repository?: WardrobeStore }) {
     };
   }, [load]);
 
-  async function toggleFavorite(item: ClothingItem) {
-    const isFavorite = !item.isFavorite;
-    setItems((current) => current.map((c) => (c.id === item.id ? { ...c, isFavorite } : c)));
-    try {
-      await repo.setFavorite(item, isFavorite);
-    } catch {
-      if (mounted.current) load();
-    }
-  }
+  const toggleFavorite = useCallback(
+    async (item: ClothingItem) => {
+      const isFavorite = !item.isFavorite;
+      setItems((current) => current.map((c) => (c.id === item.id ? { ...c, isFavorite } : c)));
+      try {
+        await repo.setFavorite(item, isFavorite);
+      } catch {
+        if (!mounted.current) return;
+        // Desfaz só esta peça, e só se ninguém a mudou de novo nesse meio tempo.
+        setItems((current) =>
+          current.map((c) => (c.id === item.id && c.isFavorite === isFavorite ? { ...c, isFavorite: !isFavorite } : c)),
+        );
+        toast('Não foi possível salvar o favorito.');
+      }
+    },
+    [repo, toast],
+  );
+
+  const renderGarment = useCallback(
+    (item: ClothingItem) => <GarmentCard item={item} onFavoriteToggle={toggleFavorite} />,
+    [toggleFavorite],
+  );
 
   const visible = selected ? items.filter((item) => item.category === selected) : items;
+
+  useBackNavigation(adding, () => setAdding(false));
 
   if (adding) {
     return (
@@ -112,9 +130,7 @@ export function WardrobeScreen({ repository }: { repository?: WardrobeStore }) {
             maxItemWidth={220}
             aspectRatio={0.82}
             keyExtractor={(item) => item.id}
-            renderItem={(item) => (
-              <GarmentCard item={item} onFavoriteToggle={() => toggleFavorite(item)} />
-            )}
+            renderItem={renderGarment}
           />
         )}
       </View>
@@ -164,7 +180,13 @@ function CategoryTabs({
   );
 }
 
-function GarmentCard({ item, onFavoriteToggle }: { item: ClothingItem; onFavoriteToggle: () => void }) {
+const GarmentCard = memo(function GarmentCard({
+  item,
+  onFavoriteToggle,
+}: {
+  item: ClothingItem;
+  onFavoriteToggle: (item: ClothingItem) => void;
+}) {
   return (
     <Card style={styles.card}>
       <View style={styles.cardBody}>
@@ -173,7 +195,7 @@ function GarmentCard({ item, onFavoriteToggle }: { item: ClothingItem; onFavorit
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={item.isFavorite ? 'Desfavoritar peça' : 'Favoritar peça'}
-            onPress={onFavoriteToggle}
+            onPress={() => onFavoriteToggle(item)}
             hitSlop={8}
             style={styles.heart}
           >
@@ -193,7 +215,7 @@ function GarmentCard({ item, onFavoriteToggle }: { item: ClothingItem; onFavorit
       </View>
     </Card>
   );
-}
+});
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.cream, padding: PADDING },

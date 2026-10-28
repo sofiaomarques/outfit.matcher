@@ -17,6 +17,7 @@ import { RecommendationService, describeRecommendError } from '../services/recom
 import { colors } from '../theme/colors';
 import { text } from '../theme/fonts';
 import { OutfitDetailScreen } from './OutfitDetailScreen';
+import { useBackNavigation } from '../services/backNavigation';
 
 const WEATHER_FILTERS = ['Qualquer clima', 'Calor', 'Frio', 'Chuva'];
 const PER_PAGE = 6;
@@ -102,6 +103,8 @@ export function LooksScreen({ recommender, history = outfitHistory }: LooksScree
     setWeather(next);
     if (items) recommend(items, next);
   }
+
+  useBackNavigation(detail !== null, () => setDetail(null));
 
   if (detail) {
     return <OutfitDetailScreen outfit={detail} history={history} onBack={() => setDetail(null)} />;

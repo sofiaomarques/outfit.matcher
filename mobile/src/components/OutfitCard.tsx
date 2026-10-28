@@ -41,7 +41,7 @@ export function OutfitCard({ outfit, isFavorite, onFavoriteToggle, onPress }: Ou
           accessibilityRole="button"
           accessibilityLabel={isFavorite ? 'Desfavoritar look' : 'Favoritar look'}
           onPress={onFavoriteToggle}
-          hitSlop={8}
+          hitSlop={12}
           style={styles.heart}
         >
           <Ionicons name={isFavorite ? 'heart' : 'heart-outline'} size={20} color={colors.wine} />
