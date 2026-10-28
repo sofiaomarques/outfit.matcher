@@ -1,0 +1,25 @@
+# O que NAO vai pro Cloud Build no build da API (deploy/cloud_run.sh api).
+# Mesmo espirito do .dockerignore: so o que o Dockerfile da raiz copia, sem
+# enviar GBs a toa (.venv, dados de treino, app Flutter, node_modules).
+.git
+.gitignore
+.gcloudignore
+.github
+.claude
+.venv
+venv
+__pycache__/
+.pytest_cache/
+*.py[cod]
+.DS_Store
+
+dados/
+app/
+mobile/
+supabase/
+tests/
+deploy/
+
+model/*.pt
+model/.cache/
+model/historico_*.csv

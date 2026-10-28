@@ -1,0 +1,23 @@
+# Build da imagem do site (mobile/Dockerfile) no Cloud Build, chamado por
+# deploy/cloud_run.sh site com mobile/ como pasta enviada. As EXPO_PUBLIC_*
+# sao embutidas no JavaScript no build (mobile/README.md).
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg=EXPO_PUBLIC_SUPABASE_URL=${_SUPABASE_URL}
+      - --build-arg=EXPO_PUBLIC_SUPABASE_ANON_KEY=${_SUPABASE_ANON_KEY}
+      - --build-arg=EXPO_PUBLIC_API_BASE_URL=${_API_BASE_URL}
+      - --build-arg=EXPO_PUBLIC_APP_VERSION=${_APP_VERSION}
+      - --build-arg=EXPO_PUBLIC_FEEDBACK_URL=${_FEEDBACK_URL}
+      - -t
+      - ${_IMAGEM}
+      - .
+
+images: ["${_IMAGEM}"]
+
+substitutions:
+  _APP_VERSION: dev
+  _FEEDBACK_URL: ""
+
+timeout: 1200s

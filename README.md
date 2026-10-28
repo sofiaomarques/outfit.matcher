@@ -181,6 +181,12 @@ docker run --rm -p 8000:7860 -e SUPABASE_URL=https://SEU-PROJETO.supabase.co out
 
 ---
 
+### Deploy (Cloud Run)
+
+API e site vão pro Google Cloud Run com `deploy/cloud_run.sh` (`setup`, `api`,
+`site`, `status`). Passo a passo, custos e como voltar uma versão em
+[`deploy/README.md`](deploy/README.md).
+
 ## 🚀 Como usar
 
 ### Extrair features de uma imagem
