@@ -62,7 +62,9 @@ export function SettingsScreen({
     try {
       await repo.eraseMyData();
       message = 'Pronto: seus dados e fotos foram apagados.';
-    } catch {
+    } catch (e) {
+      // A causa (policy de RLS faltando, rede) só aparece no console.
+      console.warn('Apagar meus dados falhou:', e);
       message = 'Não foi possível apagar tudo. Tente de novo: o que já foi apagado não volta.';
     }
     if (mounted.current) setErasing(false);

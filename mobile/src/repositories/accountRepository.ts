@@ -48,7 +48,9 @@ export class AccountRepository {
       const { error } = await this.client.from(table).delete().eq('user_id', userId);
       // Tabela que ainda não foi criada no projeto (ex.: a de rejeições, mais
       // nova): não tem o que apagar nela.
-      if (error && !isTableMissing(error)) throw error;
+      if (isTableMissing(error)) continue;
+      if (error) throw error;
+      await this.ensureNoRowsLeft(table, userId);
     }
     for (const bucket of BUCKETS) {
       const storage = this.client.storage.from(bucket);
@@ -61,6 +63,20 @@ export class AccountRepository {
         remove: async (paths) => unwrap(await storage.remove(paths)).length,
       });
     }
+  }
+
+  /**
+   * O PostgREST não dá erro quando o RLS recusa um delete (ex.: falta a
+   * policy de delete no projeto): só não apaga nada. Sem esta conferência, a
+   * tela diria "Pronto" com os dados ainda lá.
+   */
+  private async ensureNoRowsLeft(table: string, userId: string): Promise<void> {
+    const { count, error } = await this.client
+      .from(table)
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId);
+    if (error) throw error;
+    if (count) throw new Error(`${count} registro(s) de ${table} não foram apagados.`);
   }
 }
 
