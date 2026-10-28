@@ -12,12 +12,12 @@ import { StarShape } from './StarShape';
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
 /** `shortLabel` é o rótulo da barra inferior, que tem pouco espaço por item. */
-export const appDestinations: { icon: IconName; label: string; shortLabel: string }[] = [
-  { icon: 'shirt-outline', label: 'Meu guarda-roupa', shortLabel: 'Guarda-roupa' },
-  { icon: 'sparkles-outline', label: 'Novo look', shortLabel: 'Novo look' },
-  { icon: 'star-outline', label: 'Looks', shortLabel: 'Looks' },
-  { icon: 'cart-outline', label: 'Wishlist', shortLabel: 'Wishlist' },
-  { icon: 'settings-outline', label: 'Configurações', shortLabel: 'Ajustes' },
+export const appDestinations: { icon: IconName; label: string; shortLabel: string; slug: string }[] = [
+  { icon: 'shirt-outline', label: 'Meu guarda-roupa', shortLabel: 'Guarda-roupa', slug: 'guarda-roupa' },
+  { icon: 'sparkles-outline', label: 'Novo look', shortLabel: 'Novo look', slug: 'novo-look' },
+  { icon: 'star-outline', label: 'Looks', shortLabel: 'Looks', slug: 'looks' },
+  { icon: 'cart-outline', label: 'Wishlist', shortLabel: 'Wishlist', slug: 'wishlist' },
+  { icon: 'settings-outline', label: 'Configurações', shortLabel: 'Ajustes', slug: 'configuracoes' },
 ];
 
 const WIDE_BREAKPOINT = 840;

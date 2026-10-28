@@ -16,7 +16,7 @@ import { WardrobeScreen } from './src/screens/WardrobeScreen';
 import { WishlistScreen } from './src/screens/WishlistScreen';
 import { isSupabaseConfigured } from './src/services/apiConfig';
 import { apiStatus } from './src/services/apiStatus';
-import { saveTabInAddress, tabFromAddress } from './src/services/backNavigation';
+import { VisibleContext, saveTabInAddress, tabFromAddress } from './src/services/backNavigation';
 import { displayNameOf, isAccountSwitch } from './src/services/currentUser';
 import { outfitHistory } from './src/services/outfitHistory';
 import {
@@ -68,6 +68,8 @@ function MissingConfigScreen() {
  * Onde está o fluxo do link de "Esqueci minha senha": abrindo a sessão do
  * link, pedindo a senha nova, ou o link não valeu (expirado, já usado).
  */
+const tabSlugs = appDestinations.map((d) => d.slug);
+
 type Recovery =
   | { step: 'none' }
   | { step: 'starting' }
@@ -81,7 +83,7 @@ type Recovery =
  */
 function RootNavigator() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
-  const [selectedIndex, setSelectedIndex] = useState(tabFromAddress);
+  const [selectedIndex, setSelectedIndex] = useState(() => tabFromAddress(tabSlugs));
   // Muda depois de "Apagar meus dados": a key nova recria as outras telas,
   // que carregam de novo (agora vazias).
   const [dataVersion, setDataVersion] = useState(0);
@@ -89,7 +91,7 @@ function RootNavigator() {
   const showToast = useToast();
   function selectTab(index: number) {
     setSelectedIndex(index);
-    saveTabInAddress(index);
+    saveTabInAddress(tabSlugs, index);
   }
   // De quem é o estado em memória (histórico de looks, guarda-roupa em análise).
   const userIdRef = useRef<string | null | undefined>(undefined);
@@ -208,6 +210,7 @@ function RootNavigator() {
           key={`${destination.label}-${dataVersion}`}
           style={[styles.pane, index !== selectedIndex && styles.hidden]}
         >
+          <VisibleContext.Provider value={index === selectedIndex}>
           {index === 0 ? (
             <WardrobeScreen />
           ) : index === 1 ? (
@@ -219,6 +222,7 @@ function RootNavigator() {
           ) : index === appDestinations.length - 1 ? (
             <SettingsScreen onDataErased={onDataErased} />
           ) : null}
+          </VisibleContext.Provider>
         </View>
       ))}
     </AppShell>

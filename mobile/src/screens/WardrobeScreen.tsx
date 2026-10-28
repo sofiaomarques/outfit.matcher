@@ -62,9 +62,9 @@ export function WardrobeScreen({ repository }: { repository?: WardrobeStore }) {
         await repo.setFavorite(item, isFavorite);
       } catch {
         if (!mounted.current) return;
-        // Desfaz só esta peça, sem recarregar a grade inteira.
+        // Desfaz só esta peça, e só se ninguém a mudou de novo nesse meio tempo.
         setItems((current) =>
-          current.map((c) => (c.id === item.id ? { ...c, isFavorite: item.isFavorite } : c)),
+          current.map((c) => (c.id === item.id && c.isFavorite === isFavorite ? { ...c, isFavorite: !isFavorite } : c)),
         );
         toast('Não foi possível salvar o favorito.');
       }

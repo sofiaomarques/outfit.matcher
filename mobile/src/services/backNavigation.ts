@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { createContext, useContext, useEffect, useRef } from 'react';
 import { BackHandler, Platform } from 'react-native';
 
 /**
@@ -11,16 +11,20 @@ interface Overlay {
 
 const stack: Overlay[] = [];
 const isWeb = Platform.OS === 'web' && typeof window !== 'undefined' && !!window.history;
-// popstates provocados por nós mesmos (fechar pelo botão da tela) não fecham mais nada.
-let ignoredPops = 0;
 let listening = false;
 
-function onPopState() {
-  if (ignoredPops > 0) {
-    ignoredPops--;
-    return;
-  }
-  stack.pop()?.close();
+/**
+ * Falso nas telas escondidas (abas de fundo, seção fechada do Looks): elas
+ * continuam montadas, mas não podem tomar o "voltar" de quem está à vista.
+ */
+export const VisibleContext = createContext(true);
+
+// Cada entrada empurrada guarda a profundidade da pilha. Só fechamos quando o
+// histórico recuou para menos telas do que as abertas: avançar, ou o popstate
+// causado pelo nosso próprio history.back(), deixa a profundidade >= a da pilha.
+function onPopState(event: PopStateEvent) {
+  const depth = event.state?.overlay ?? 0;
+  if (depth < stack.length) stack.pop()?.close();
 }
 
 function open(overlay: Overlay) {
@@ -40,10 +44,7 @@ function dismiss(overlay: Overlay) {
   if (index === -1) return;
   stack.splice(index, 1);
   // Só desfaz a entrada que nós empurramos; se o histórico já andou, não há popstate a esperar.
-  if (isWeb && window.history.state?.overlay) {
-    ignoredPops++;
-    window.history.back();
-  }
+  if (isWeb && window.history.state?.overlay) window.history.back();
 }
 
 /**
@@ -51,13 +52,15 @@ function dismiss(overlay: Overlay) {
  * interna enquanto `active`, em vez de sair do app ou da página.
  */
 export function useBackNavigation(active: boolean, onBack: () => void) {
+  const visible = useContext(VisibleContext);
+  const registered = active && visible;
   const onBackRef = useRef(onBack);
   useEffect(() => {
     onBackRef.current = onBack;
   });
 
   useEffect(() => {
-    if (!active) return;
+    if (!registered) return;
     const overlay: Overlay = { close: () => onBackRef.current() };
     open(overlay);
     const hardware = isWeb
@@ -73,22 +76,20 @@ export function useBackNavigation(active: boolean, onBack: () => void) {
       hardware?.remove();
       dismiss(overlay);
     };
-  }, [active]);
+  }, [registered]);
 }
 
-const TAB_SLUGS = ['guarda-roupa', 'novo-look', 'looks', 'wishlist', 'configuracoes'];
-
 /** Aba aberta segundo o endereço (`#/looks`); 0 se não houver ou fora da web. */
-export function tabFromAddress(): number {
+export function tabFromAddress(slugs: string[]): number {
   if (!isWeb) return 0;
-  const index = TAB_SLUGS.indexOf(window.location.hash.replace(/^#\/?/, ''));
+  const index = slugs.indexOf(window.location.hash.replace(/^#\/?/, ''));
   return index === -1 ? 0 : index;
 }
 
 /** Guarda a aba no endereço, pra recarregar a página voltar nela. */
-export function saveTabInAddress(index: number) {
+export function saveTabInAddress(slugs: string[], index: number) {
   if (!isWeb) return;
-  const hash = `#/${TAB_SLUGS[index] ?? TAB_SLUGS[0]}`;
+  const hash = `#/${slugs[index] ?? slugs[0]}`;
   if (window.location.hash === hash) return;
   const { pathname, search } = window.location;
   window.history.replaceState(window.history.state, '', `${pathname}${search}${hash}`);

@@ -10,6 +10,9 @@ import { colors } from '../theme/colors';
 /** Lado (px) da miniatura pedida ao Storage quando o tamanho não é fixo: célula máxima do grid (220) em 2x. */
 const GRID_THUMB_PX = 440;
 
+// Vira true quando o Storage recusa uma miniatura: sem transformações, as próximas pulam o pedido que falharia.
+let transformsUnavailable = false;
+
 /**
  * Troca a URL assinada de `/object/sign/` pela de `/render/image/sign/`, que
  * serve a foto redimensionada (image transformations do Supabase) com o mesmo
@@ -42,7 +45,7 @@ export const GarmentThumbnail = memo(function GarmentThumbnail({
   if (item.imageUrl && failedFor !== item.imageUrl) {
     const original = item.imageUrl;
     const px = size ? size * 2 : GRID_THUMB_PX;
-    const useOriginal = thumbFailedFor === original;
+    const useOriginal = transformsUnavailable || thumbFailedFor === original;
     const uri = useOriginal ? original : thumbnailUrl(original, px);
     // A URL assinada muda a cada hora; sem chave própria o cache de disco jogaria as fotos fora a cada renovação.
     const base = item.storagePath ?? item.id;
@@ -54,7 +57,11 @@ export const GarmentThumbnail = memo(function GarmentThumbnail({
         cachePolicy="disk"
         contentFit="cover"
         transition={150}
-        onError={() => (uri === original ? setFailedFor(original) : setThumbFailedFor(original))}
+        onError={() => {
+          if (uri === original) return setFailedFor(original);
+          transformsUnavailable = true;
+          setThumbFailedFor(original);
+        }}
         style={[box, styles.image]}
       />
     );

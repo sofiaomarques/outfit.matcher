@@ -41,6 +41,7 @@ export function OutfitCard({ outfit, isFavorite, onFavoriteToggle, onPress }: Ou
           accessibilityRole="button"
           accessibilityLabel={isFavorite ? 'Desfavoritar look' : 'Favoritar look'}
           onPress={onFavoriteToggle}
+          hitSlop={12}
           style={styles.heart}
         >
           <Ionicons name={isFavorite ? 'heart' : 'heart-outline'} size={20} color={colors.wine} />
@@ -60,16 +61,7 @@ export function OutfitCard({ outfit, isFavorite, onFavoriteToggle, onPress }: Ou
 
 const styles = StyleSheet.create({
   body: { flex: 1, padding: 12 },
-  // Área de toque de 44pt sem mexer no layout: margens negativas compensam o espaço extra.
-  heart: {
-    alignSelf: 'flex-end',
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    margin: -12,
-    marginBottom: -8,
-  },
+  heart: { alignSelf: 'flex-end', marginBottom: 4 },
   row: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   thumb: { paddingHorizontal: 3 },
 });

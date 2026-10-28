@@ -1,7 +1,7 @@
 import { render } from '@testing-library/react-native';
 import { BackHandler } from 'react-native';
 
-import { useBackNavigation } from './backNavigation';
+import { VisibleContext, useBackNavigation } from './backNavigation';
 
 type Handler = Parameters<typeof BackHandler.addEventListener>[1];
 
@@ -58,5 +58,16 @@ describe('useBackNavigation', () => {
     pressBack();
     expect(second).toHaveBeenCalledTimes(1);
     expect(first).not.toHaveBeenCalled();
+  });
+
+  it('tela escondida não toma o voltar', async () => {
+    const hidden = jest.fn();
+    await render(
+      <VisibleContext.Provider value={false}>
+        <Screen open onBack={hidden} />
+      </VisibleContext.Provider>,
+    );
+    pressBack();
+    expect(hidden).not.toHaveBeenCalled();
   });
 });
